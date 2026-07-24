@@ -1,0 +1,14 @@
+.env
+twitch_token.json
+
+__pycache__/
+*.pyc
+
+.vscode/
+.idea/
+
+stream.ts
+last_channel.txt
+transcript.txt
+transcript_debug.txt
+transcript_live.jsonl

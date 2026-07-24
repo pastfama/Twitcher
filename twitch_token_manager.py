@@ -1,0 +1,619 @@
+import json
+import os
+
+import requests
+from dotenv import load_dotenv
+
+
+# ============================================================
+#                    CONFIGURATION
+# ============================================================
+
+
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+
+ENV_FILE = os.path.join(
+    BASE_DIR,
+    ".env"
+)
+
+
+TOKEN_FILE = os.path.join(
+    BASE_DIR,
+    "twitch_token.json"
+)
+
+
+VALIDATE_URL = (
+    "https://id.twitch.tv/oauth2/validate"
+)
+
+
+TOKEN_URL = (
+    "https://id.twitch.tv/oauth2/token"
+)
+
+
+# ============================================================
+#                    LOAD ENVIRONMENT
+# ============================================================
+
+
+load_dotenv(
+    ENV_FILE
+)
+
+
+CLIENT_ID = (
+    os.getenv(
+        "TWITCH_CLIENT_ID",
+        ""
+    )
+    or ""
+).strip()
+
+
+CLIENT_SECRET = (
+    os.getenv(
+        "TWITCH_CLIENT_SECRET",
+        ""
+    )
+    or ""
+).strip()
+
+
+# ============================================================
+#                    TOKEN MANAGER
+# ============================================================
+
+
+class TwitchTokenManager:
+
+
+    # ========================================================
+    #                    LOAD TOKEN
+    # ========================================================
+
+
+    @staticmethod
+    def load_token():
+
+        if not os.path.exists(
+            TOKEN_FILE
+        ):
+
+            print()
+
+            print(
+                "[TWITCH AUTH] Token file not found."
+            )
+
+            print(
+                TOKEN_FILE
+            )
+
+            return None
+
+
+        try:
+
+            with open(
+                TOKEN_FILE,
+                "r",
+                encoding="utf-8"
+            ) as file:
+
+                token_data = json.load(
+                    file
+                )
+
+
+            if not isinstance(
+                token_data,
+                dict
+            ):
+
+                print()
+
+                print(
+                    "[TWITCH AUTH] Token file is invalid."
+                )
+
+                return None
+
+
+            return token_data
+
+
+        except Exception as error:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] Failed to read token file:"
+            )
+
+            print(
+                error
+            )
+
+            return None
+
+
+    # ========================================================
+    #                    SAVE TOKEN
+    # ========================================================
+
+
+    @staticmethod
+    def save_token(
+        token_data
+    ):
+
+        with open(
+            TOKEN_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            json.dump(
+                token_data,
+                file,
+                indent=4
+            )
+
+
+    # ========================================================
+    #                    VALIDATE TOKEN
+    # ========================================================
+
+
+    @staticmethod
+    def validate_token(
+        access_token
+    ):
+
+        access_token = (
+            access_token
+            or ""
+        ).strip()
+
+
+        if not access_token:
+
+            return False
+
+
+        try:
+
+            response = requests.get(
+
+                VALIDATE_URL,
+
+                headers={
+
+                    "Authorization":
+
+                    f"OAuth {access_token}"
+
+                },
+
+                timeout=15
+
+            )
+
+
+            print()
+
+            print(
+                "[TWITCH AUTH] Token validation:"
+            )
+
+            print(
+                f"HTTP {response.status_code}"
+            )
+
+
+            if response.status_code == 200:
+
+                data = response.json()
+
+
+                print()
+
+                print(
+                    "[TWITCH AUTH] Token belongs to:"
+                )
+
+                print(
+                    f"          "
+                    f"{data.get('login')}"
+                )
+
+
+                print()
+
+                print(
+                    "[TWITCH AUTH] Token scopes:"
+                )
+
+                print(
+                    f"          "
+                    f"{data.get('scopes', [])}"
+                )
+
+
+                return True
+
+
+            print()
+
+            print(
+                response.text
+            )
+
+
+            return False
+
+
+        except Exception as error:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] Validation error:"
+            )
+
+            print(
+                error
+            )
+
+
+            return False
+
+
+    # ========================================================
+    #                    REFRESH TOKEN
+    # ========================================================
+
+
+    @staticmethod
+    def refresh_token(
+        refresh_token_value
+    ):
+
+        if not CLIENT_ID:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "TWITCH_CLIENT_ID missing."
+            )
+
+            return None
+
+
+        if not CLIENT_SECRET:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "TWITCH_CLIENT_SECRET missing."
+            )
+
+            return None
+
+
+        if not refresh_token_value:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "Refresh token missing."
+            )
+
+            return None
+
+
+        print()
+
+        print(
+            "[TWITCH AUTH] "
+            "Access token is invalid or expired."
+        )
+
+
+        print()
+
+        print(
+            "[TWITCH AUTH] Refreshing token..."
+        )
+
+
+        try:
+
+            response = requests.post(
+
+                TOKEN_URL,
+
+                params={
+
+                    "client_id":
+
+                    CLIENT_ID,
+
+                    "client_secret":
+
+                    CLIENT_SECRET,
+
+                    "grant_type":
+
+                    "refresh_token",
+
+                    "refresh_token":
+
+                    refresh_token_value,
+
+                },
+
+                timeout=30
+
+            )
+
+
+        except Exception as error:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "Token refresh request failed:"
+            )
+
+            print(
+                error
+            )
+
+            return None
+
+
+        if response.status_code != 200:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "Token refresh failed."
+            )
+
+            print(
+                f"HTTP {response.status_code}"
+            )
+
+            print(
+                response.text
+            )
+
+            return None
+
+
+        try:
+
+            new_token_data = response.json()
+
+
+        except Exception as error:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "Invalid refresh response:"
+            )
+
+            print(
+                error
+            )
+
+            return None
+
+
+        new_access_token = (
+            new_token_data.get(
+                "access_token"
+            )
+            or ""
+        ).strip()
+
+
+        if not new_access_token:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "Refresh response contains "
+                "no access token."
+            )
+
+            return None
+
+
+        # ----------------------------------------------------
+        # PRESERVE REFRESH TOKEN
+        # ----------------------------------------------------
+
+
+        if not new_token_data.get(
+            "refresh_token"
+        ):
+
+            new_token_data[
+                "refresh_token"
+            ] = refresh_token_value
+
+
+        self_token_data = {
+
+            "access_token":
+
+            new_token_data.get(
+                "access_token"
+            ),
+
+            "refresh_token":
+
+            new_token_data.get(
+                "refresh_token"
+            ),
+
+        }
+
+
+        if new_token_data.get(
+            "expires_in"
+        ) is not None:
+
+            self_token_data[
+                "expires_in"
+            ] = new_token_data[
+                "expires_in"
+            ]
+
+
+        save_token(
+            self_token_data
+        )
+
+
+        print()
+
+        print(
+            "[TWITCH AUTH] "
+            "Token refreshed successfully."
+        )
+
+
+        return self_token_data
+
+
+    # ========================================================
+    #                    GET VALID TOKEN
+    # ========================================================
+
+
+    @classmethod
+    def get_valid_token(
+        cls
+    ):
+
+        token_data = (
+            cls.load_token()
+        )
+
+
+        if not token_data:
+
+            return None
+
+
+        access_token = (
+            token_data.get(
+                "access_token"
+            )
+            or ""
+        ).strip()
+
+
+        if not access_token:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "Access token missing."
+            )
+
+            return None
+
+
+        # ----------------------------------------------------
+        # VALID ACCESS TOKEN
+        # ----------------------------------------------------
+
+
+        if cls.validate_token(
+            access_token
+        ):
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "Existing token is valid."
+            )
+
+
+            return access_token
+
+
+        # ----------------------------------------------------
+        # REFRESH ACCESS TOKEN
+        # ----------------------------------------------------
+
+
+        refresh_token_value = (
+            token_data.get(
+                "refresh_token"
+            )
+            or ""
+        ).strip()
+
+
+        if not refresh_token_value:
+
+            print()
+
+            print(
+                "[TWITCH AUTH] "
+                "No refresh token available."
+            )
+
+            return None
+
+
+        new_token_data = (
+            cls.refresh_token(
+                refresh_token_value
+            )
+        )
+
+
+        if not new_token_data:
+
+            return None
+
+
+        return (
+            new_token_data.get(
+                "access_token"
+            )
+        )
+
+
+# ============================================================
+#                    COMPATIBILITY FUNCTION
+# ============================================================
+
+
+def get_valid_token():
+
+    return (
+        TwitchTokenManager.get_valid_token()
+    )
