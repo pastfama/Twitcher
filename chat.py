@@ -5,16 +5,20 @@ import threading
 
 import requests
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, Qt
+from PySide6.QtGui import QAction
+
+from logger import debug, info, warning, error
 
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QTextEdit,
+    QTextBrowser,
     QLineEdit,
     QPushButton,
     QLabel,
+    QMenu,
 )
 
 from twitch_token_manager import get_valid_token
@@ -106,6 +110,205 @@ def load_twitch_token():
             "[CHAT] Failed to obtain valid Twitch token:"
 
         )
+
+        print(
+
+            error
+
+        )
+
+        return ""
+
+
+# ============================================================
+#                    TRANSLITERATION HELPERS
+# ============================================================
+
+
+def transliterate_to_russian(
+
+    text
+
+):
+
+    if not text:
+
+        return ""
+
+
+    combos = [
+
+        ("shch", "щ"),
+
+        ("yo", "ё"),
+
+        ("yu", "ю"),
+
+        ("ya", "я"),
+
+        ("zh", "ж"),
+
+        ("kh", "х"),
+
+        ("ts", "ц"),
+
+        ("ch", "ч"),
+
+        ("sh", "ш"),
+
+        ("ye", "е"),
+
+    ]
+
+
+    letters = {
+
+        "a": "а",
+
+        "b": "б",
+
+        "v": "в",
+
+        "g": "г",
+
+        "d": "д",
+
+        "e": "е",
+
+        "z": "з",
+
+        "i": "и",
+
+        "j": "й",
+
+        "k": "к",
+
+        "l": "л",
+
+        "m": "м",
+
+        "n": "н",
+
+        "o": "о",
+
+        "p": "п",
+
+        "r": "р",
+
+        "s": "с",
+
+        "t": "т",
+
+        "u": "у",
+
+        "f": "ф",
+
+        "h": "х",
+
+        "c": "ц",
+
+        "y": "ы",
+
+        "q": "к",
+
+        "w": "в",
+
+        "x": "кс",
+
+        "\"": "ь",
+
+        "'": "ь",
+
+        "`": "ъ",
+
+    }
+
+
+    def match_case(
+
+        source,
+
+        replacement
+
+    ):
+
+        if source.isupper():
+
+            return replacement.upper()
+
+        if source[0].isupper():
+
+            return replacement.upper()
+
+        return replacement
+
+
+    result = ""
+
+    index = 0
+
+    length = len(text)
+
+
+    while index < length:
+
+        chunk = None
+
+        for latin, cyrillic in combos:
+
+            segment = text[index:index + len(latin)]
+
+            if segment.lower() == latin:
+
+                chunk = match_case(
+
+                    segment,
+
+                    cyrillic
+
+                )
+
+                index += len(latin)
+
+                break
+
+        if chunk is not None:
+
+            result += chunk
+
+            continue
+
+
+        char = text[index]
+
+        lower = char.lower()
+
+        if lower in letters:
+
+            result += match_case(
+
+                char,
+
+                letters[lower]
+
+            )
+
+        else:
+
+            result += char
+
+        index += 1
+
+
+    return result
+
+
+
+def get_token_identity(
+
+    access_token
+
+):
 
         print(
 
@@ -1480,12 +1683,36 @@ class ChatWidget(
         )
 
 
-        self.chat_display = QTextEdit()
+        self.chat_display = QTextBrowser()
 
 
         self.chat_display.setReadOnly(
 
             True
+
+        )
+
+        self.chat_display.setOpenExternalLinks(
+
+            False
+
+        )
+
+        self.chat_display.anchorClicked.connect(
+
+            self.on_chat_anchor_clicked
+
+        )
+
+        self.chat_display.setContextMenuPolicy(
+
+            Qt.CustomContextMenu
+
+        )
+
+        self.chat_display.customContextMenuRequested.connect(
+
+            self.show_chat_context_menu
 
         )
 
@@ -1541,6 +1768,69 @@ class ChatWidget(
         controls.addWidget(
 
             self.send_button
+
+        )
+
+
+        self.translit_button = QPushButton(
+
+            "TRANSLIT"
+
+        )
+
+
+        self.translit_button.setToolTip(
+
+            "Convert Latin text in the message box to Russian Cyrillic."
+
+        )
+
+
+        self.translit_button.clicked.connect(
+
+            self.apply_translit
+
+        )
+
+
+        controls.addWidget(
+
+            self.translit_button
+
+        )
+
+
+        self.auto_translit_button = QPushButton(
+
+            "AUTO"
+
+        )
+
+
+        self.auto_translit_button.setCheckable(
+
+            True
+
+        )
+
+
+        self.auto_translit_button.setToolTip(
+
+            "Automatically transliterate outgoing messages when sending."
+
+        )
+
+
+        self.auto_translit_button.clicked.connect(
+
+            self.toggle_auto_translit
+
+        )
+
+
+        controls.addWidget(
+
+            self.auto_translit_button
 
         )
 
@@ -1785,13 +2075,214 @@ class ChatWidget(
         )
 
 
+        reply_target = html.escape(
+
+            username
+
+        )
+
+
+        debug(f"Displaying chat message from {username}: {message}")
+
         self.chat_display.append(
 
             f"<b>{safe_username}</b>: "
 
-            f"{safe_message}"
+            f"{safe_message} "
+
+            f"<a href=\"reply:{reply_target}\" "
+
+            f"style=\"color:#66b2ff;text-decoration:none\">[reply]</a>"
 
         )
+
+
+    def show_chat_context_menu(
+
+        self,
+
+        point
+
+    ):
+
+        cursor = self.chat_display.cursorForPosition(
+
+            point
+
+        )
+
+        username = self.get_username_from_cursor(
+
+            cursor
+
+        )
+
+        menu = self.chat_display.createStandardContextMenu()
+
+        if username:
+
+            reply_action = QAction(
+
+                f"Reply to {username}",
+
+                self
+
+            )
+
+            reply_action.triggered.connect(
+
+                lambda checked=False, u=username: self.reply_to_username(
+
+                    u
+
+                )
+
+            )
+
+            if menu.actions():
+
+                menu.insertAction(
+
+                    menu.actions()[0],
+
+                    reply_action
+
+                )
+
+            else:
+
+                menu.addAction(
+
+                    reply_action
+
+                )
+
+        menu.exec(
+
+            self.chat_display.mapToGlobal(
+
+                point
+
+            )
+
+        )
+
+
+    def get_username_from_cursor(
+
+        self,
+
+        cursor
+
+    ):
+
+        block_text = cursor.block().text().strip()
+
+        if not block_text or block_text.startswith(
+
+            "[SYSTEM]"
+
+        ):
+
+            return None
+
+
+        if ":" not in block_text:
+
+            return None
+
+
+        username = block_text.split(":", 1)[0].strip()
+
+        return username or None
+
+
+    def reply_to_username(
+
+        self,
+
+        username
+
+    ):
+
+        if not username:
+
+            return
+
+
+        prefix = f"@{username} "
+
+        current_text = self.message_input.text()
+
+        if current_text.startswith(
+
+            prefix
+
+        ):
+
+            self.message_input.setFocus()
+
+            self.message_input.setCursorPosition(
+
+                len(prefix)
+
+            )
+
+            return
+
+
+        self.message_input.setText(
+
+            prefix + current_text
+
+        )
+
+        self.message_input.setFocus()
+
+        self.message_input.setCursorPosition(
+
+            len(prefix)
+
+        )
+
+
+    def on_chat_anchor_clicked(
+
+        self,
+
+        url
+
+    ):
+
+        url_text = url.toString()
+
+        debug(f"Chat anchor clicked: {url_text}")
+
+        if url_text.startswith(
+
+            "reply:"
+
+        ):
+
+            username = html.unescape(
+
+                url_text.split(
+
+                    ":",
+
+                    1
+
+                )[1]
+
+            )
+
+            debug(f"Replying to username: {username}")
+
+            self.reply_to_username(
+
+                username
+
+            )
 
 
     # ========================================================
@@ -1844,6 +2335,21 @@ class ChatWidget(
             .strip()
 
         )
+
+
+        if self.auto_translit_button.isChecked():
+
+            message = transliterate_to_russian(
+
+                message
+
+            )
+
+            self.message_input.setText(
+
+                message
+
+            )
 
 
         if not message:
@@ -1907,6 +2413,67 @@ class ChatWidget(
     # ========================================================
     #                    CONNECTED
     # ========================================================
+
+
+    def apply_translit(
+
+        self
+
+    ):
+
+        current_text = (
+
+            self.message_input
+
+            .text()
+
+            .strip()
+
+        )
+
+
+        if not current_text:
+
+            return
+
+
+        transliterated = transliterate_to_russian(
+
+            current_text
+
+        )
+
+
+        self.message_input.setText(
+
+            transliterated
+
+        )
+
+
+    def toggle_auto_translit(
+
+        self,
+
+        checked
+
+    ):
+
+        if checked:
+
+            self.auto_translit_button.setText(
+
+                "AUTO ON"
+
+            )
+
+        else:
+
+            self.auto_translit_button.setText(
+
+                "AUTO"
+
+            )
 
 
     def chat_connected(

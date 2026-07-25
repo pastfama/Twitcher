@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
+from logger import debug, info, warning, error
+
 
 # ============================================================
 # CONFIGURATION
@@ -1248,19 +1250,89 @@ class VideoWindow(QWidget):
 
         self.activateWindow()
 
+
+    def resize_preserve_position(self, width, height):
+
+        screen = QApplication.primaryScreen()
+
+        if not screen:
+
+            return
+
+
+        geometry = screen.availableGeometry()
+
+        width = min(
+
+            width,
+
+            geometry.width()
+
+        )
+
+        height = min(
+
+            height,
+
+            geometry.height()
+
+        )
+
+        x = self.x()
+
+        y = self.y()
+
+        max_x = geometry.x() + geometry.width() - width
+
+        max_y = geometry.y() + geometry.height() - height
+
+        x = max(
+
+            geometry.x(),
+
+            min(x, max_x)
+
+        )
+
+        y = max(
+
+            geometry.y(),
+
+            min(y, max_y)
+
+        )
+
+        self.showNormal()
+
+        self.setGeometry(
+
+            x,
+
+            y,
+
+            width,
+
+            height
+
+        )
+
+        self.raise_()
+
+        self.activateWindow()
+
     # ========================================================
     # PRESET SIZES
     # ========================================================
 
     def resize_small(self):
 
-        self.resize_and_center(
+        self.resize_preserve_position(
             *SMALL_SIZE
         )
 
     def resize_medium(self):
 
-        self.resize_and_center(
+        self.resize_preserve_position(
             *MEDIUM_SIZE
         )
 
@@ -1409,11 +1481,15 @@ class VideoWindow(QWidget):
             "geometry"
         )
 
+        debug(f"Restoring video window state: geometry={saved_geometry}")
+
         if saved_geometry:
 
             restored = self.restoreGeometry(
                 saved_geometry
             )
+
+            debug(f"restoreGeometry returned {restored}")
 
             if not restored:
 
@@ -1423,6 +1499,7 @@ class VideoWindow(QWidget):
 
         else:
 
+            debug("No saved geometry found; using medium default")
             self.resize_and_center(
                 *MEDIUM_SIZE
             )
@@ -1430,6 +1507,8 @@ class VideoWindow(QWidget):
         saved_volume = self.settings.value(
             "volume"
         )
+
+        debug(f"Restoring video volume: {saved_volume}")
 
         if saved_volume is not None:
 
@@ -1458,7 +1537,11 @@ class VideoWindow(QWidget):
                 TypeError
             ):
 
-                pass
+                warning("Invalid saved volume; ignoring")
+
+
+    # Alias for older restore method names.
+    restore_saved_geometry = restore_saved_state
 
     # ========================================================
     # SAVE STATE
@@ -1467,15 +1550,18 @@ class VideoWindow(QWidget):
     def save_window_state(self):
 
         if not self.isFullScreen():
-
+            geometry_value = self.saveGeometry()
+            debug(f"Saving video window geometry: {geometry_value}")
             self.settings.setValue(
                 "geometry",
-                self.saveGeometry()
+                geometry_value
             )
 
+        volume_value = self.volume_slider.value()
+        debug(f"Saving video volume: {volume_value}")
         self.settings.setValue(
             "volume",
-            self.volume_slider.value()
+            volume_value
         )
 
         self.settings.sync()

@@ -5,10 +5,14 @@ import traceback
 import threading
 from pathlib import Path
 
+from PySide6.QtCore import QCoreApplication, QMetaObject, Qt
 from PySide6.QtWidgets import QApplication
 
+from logger import debug, info, warning, error
+
 from api import TwitchAPI
-from mainmenuv2 import MainMenu
+from mainmenu import MainMenu
+from twitch_auth import authenticate
 from twitch_token_manager import get_valid_token
 
 
@@ -230,6 +234,19 @@ def initialize_twitch_authentication():
 
     if not access_token:
 
+        print()
+
+        print(
+            "[TWITCH] No valid Twitch token found. Starting authorization flow..."
+        )
+
+        authenticate()
+
+        access_token = get_valid_token()
+
+
+    if not access_token:
+
         raise RuntimeError(
 
             "Twitch authentication is unavailable.\n\n"
@@ -382,6 +399,17 @@ def start_twitcher(
 
             video_window,
 
+            "restore_saved_state"
+
+        ):
+
+            video_window.restore_saved_state()
+
+
+        elif hasattr(
+
+            video_window,
+
             "restore_saved_geometry"
 
         ):
@@ -516,6 +544,7 @@ def main():
     try:
 
         if os.environ.get("TWITCHER_WATCH") == "1":
+            debug("Watch mode enabled; starting source watcher")
             watch_files_and_exit_on_change([
                 __file__,
                 *sorted({
@@ -525,12 +554,10 @@ def main():
                 })
             ])
 
-        sys.exit(
-
-            app.exec()
-
-        )
-
+        info("Entering Qt event loop")
+        exit_code = app.exec()
+        info(f"Qt event loop exited with code {exit_code}")
+        sys.exit(exit_code)
 
     except Exception as error:
 
@@ -564,7 +591,18 @@ def watch_files_and_exit_on_change(paths, interval=1.0):
                 except OSError:
                     mtime = 0
                 if mtime != mtimes.get(path):
-                    print(f"[DEV] Source change detected: {path}")
+                    debug(f"Source change detected: {path}")
+                    app = QCoreApplication.instance()
+                    if app is not None:
+                        debug("Requesting Qt application quit from watcher thread")
+                        QMetaObject.invokeMethod(
+                            app,
+                            "quit",
+                            Qt.QueuedConnection
+                        )
+                        return
+
+                    warning("No Qt application instance available; falling back to os._exit(3)")
                     os._exit(3)
 
     thread = threading.Thread(target=watcher, daemon=True)

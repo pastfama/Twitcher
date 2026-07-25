@@ -74,11 +74,23 @@ SCOPES = [
 
     "user:read:follows",
 
+    "user:read:email",
+
     "chat:read",
 
     "chat:edit",
 
+    "channel:read:subscriptions",
+
     "channel:read:redemptions",
+
+    "channel:manage:redemptions",
+
+    "moderation:read",
+
+    "moderation:manage",
+
+    "bits:read",
 
 ]
 
@@ -747,6 +759,10 @@ def authenticate():
         "state":
 
         expected_state,
+
+        "force_verify":
+
+        "true",
 
     }
 

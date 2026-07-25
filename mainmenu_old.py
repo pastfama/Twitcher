@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from PySide6.QtCore import (
     Qt,
     QSettings,
+    QTimer,
+    Signal,
 )
 
 from PySide6.QtGui import QFont
@@ -26,9 +28,313 @@ from PySide6.QtWidgets import (
 )
 
 from chat import ChatWidget
+from logger import debug, info, warning, error
 from video import VideoWindow
 from dispatcher import StreamDispatcher
 from raid_monitor import RaidMonitor
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_FILE = os.path.join(BASE_DIR, "twitcher.log")
+
+
+class CurrentWatchingPanel(QFrame):
+
+    def __init__(self):
+
+        super().__init__()
+        self.setObjectName("CurrentCard")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+
+        title = QLabel("▶  CURRENTLY WATCHING")
+        title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        title.setStyleSheet("color: #9daaff;")
+        layout.addWidget(title)
+
+        self.channel_label = QLabel("—")
+        self.channel_label.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        layout.addWidget(self.channel_label)
+
+        self.viewers_label = QLabel("👁 — viewers")
+        layout.addWidget(self.viewers_label)
+
+        self.category_label = QLabel("🎮 —")
+        layout.addWidget(self.category_label)
+
+        self.uptime_label = QLabel("⏱ —")
+        layout.addWidget(self.uptime_label)
+
+        self.title_label = QLabel("—")
+        self.title_label.setWordWrap(True)
+        self.title_label.setStyleSheet("color: #a8adbd;")
+        layout.addWidget(self.title_label)
+
+    def set_stream(self, stream):
+
+        if not stream:
+            self.clear()
+            return
+
+        channel = stream.get("user_name", "Unknown")
+        self.channel_label.setText(f"#{channel}")
+        self.viewers_label.setText(f"👁 {stream.get('viewer_count', 0):,} viewers")
+        self.category_label.setText(f"🎮 {stream.get('game_name') or 'No category'}")
+        self.title_label.setText(stream.get("title", "—"))
+
+        started_at = stream.get("started_at")
+
+        if not started_at:
+            self.uptime_label.setText("⏱ —")
+            return
+
+        try:
+            started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            seconds = int((datetime.now(timezone.utc) - started).total_seconds())
+            hours = seconds // 3600
+            minutes = (seconds % 3600) // 60
+            self.uptime_label.setText(f"⏱ {hours}h {minutes}m")
+        except Exception:
+            self.uptime_label.setText("⏱ —")
+
+    def clear(self):
+
+        self.channel_label.setText("—")
+        self.viewers_label.setText("👁 — viewers")
+        self.category_label.setText("🎮 —")
+        self.uptime_label.setText("⏱ —")
+        self.title_label.setText("—")
+
+
+class NextStreamPanel(QFrame):
+
+    def __init__(self):
+
+        super().__init__()
+        self.setObjectName("NextCard")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+
+        title = QLabel("⏭  NEXT STREAM")
+        title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        title.setStyleSheet("color: #78d6c5;")
+        layout.addWidget(title)
+
+        self.next_channel_label = QLabel("No next stream selected")
+        self.next_channel_label.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        layout.addWidget(self.next_channel_label)
+
+        self.next_viewers_label = QLabel("👁 — viewers")
+        layout.addWidget(self.next_viewers_label)
+
+        self.next_category_label = QLabel("🎮 —")
+        layout.addWidget(self.next_category_label)
+
+        self.next_reason_label = QLabel("Waiting for live channels...")
+        self.next_reason_label.setWordWrap(True)
+        self.next_reason_label.setStyleSheet("color: #8baea8;")
+        layout.addWidget(self.next_reason_label)
+
+    def set_stream(self, stream):
+
+        if not stream:
+            self.clear()
+            return
+
+        channel = stream.get("user_name", "Unknown")
+        viewers = stream.get("viewer_count", 0)
+        category = stream.get("game_name") or "No category"
+
+        self.next_channel_label.setText(channel)
+        self.next_viewers_label.setText(f"👁 {viewers:,} viewers")
+        self.next_category_label.setText(f"🎮 {category}")
+        self.next_reason_label.setText("If the current stream ends without a raid, Twitcher will switch here.")
+
+    def clear(self):
+
+        self.next_channel_label.setText("No next stream available")
+        self.next_viewers_label.setText("👁 — viewers")
+        self.next_category_label.setText("🎮 —")
+        self.next_reason_label.setText("No other followed channels are currently live.")
+
+
+class LiveFollowedPanel(QGroupBox):
+
+    channel_selected = Signal(object)
+    refresh_requested = Signal()
+    watch_requested = Signal()
+    stop_requested = Signal()
+
+    def __init__(self):
+
+        super().__init__("LIVE FOLLOWED CHANNELS")
+
+        layout = QVBoxLayout(self)
+
+        self.channel_list = QListWidget()
+        self.channel_list.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(self.channel_list)
+
+        self.refresh_button = QPushButton("⟳  REFRESH LIVE CHANNELS")
+        self.refresh_button.clicked.connect(self.refresh_requested)
+        layout.addWidget(self.refresh_button)
+
+        self.watch_button = QPushButton("▶  WATCH SELECTED")
+        self.watch_button.clicked.connect(self.watch_requested)
+        layout.addWidget(self.watch_button)
+
+        self.stop_button = QPushButton("■  STOP VIDEO")
+        self.stop_button.clicked.connect(self.stop_requested)
+        layout.addWidget(self.stop_button)
+
+    def _on_item_clicked(self, item):
+
+        stream = item.data(Qt.ItemDataRole.UserRole)
+
+        if stream:
+            self.channel_selected.emit(stream)
+
+    def set_streams(self, streams):
+
+        self.channel_list.clear()
+
+        for stream in streams:
+            channel_name = stream.get("user_name", "Unknown")
+            viewers = stream.get("viewer_count", 0)
+            category = stream.get("game_name") or "No category"
+
+            item = QListWidgetItem(
+                f"  {channel_name}\n"
+                f"  👁 {viewers:,} viewers\n"
+                f"  🎮 {category}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, stream)
+            self.channel_list.addItem(item)
+
+    def get_selected_stream(self):
+
+        item = self.channel_list.currentItem()
+
+        if not item:
+            return None
+
+        return item.data(Qt.ItemDataRole.UserRole)
+
+
+class ChatPanel(QGroupBox):
+
+    def __init__(self, access_token):
+
+        super().__init__("TWITCH CHAT")
+
+        layout = QVBoxLayout(self)
+
+        self.chat_widget = ChatWidget(
+            username="",
+            access_token=access_token
+        )
+        self.chat_widget.setStyleSheet(
+            """
+            QTextEdit,
+            QListWidget,
+            QPlainTextEdit {
+                font-size: 18px;
+            }
+            """
+        )
+
+        layout.addWidget(self.chat_widget)
+
+    def connect_chat(self, channel):
+
+        if not channel:
+            return
+
+        self.chat_widget.channel_input.setText(channel)
+        self.chat_widget.connect_to_channel()
+
+
+class DispatcherPanel(QGroupBox):
+
+    def __init__(self):
+
+        super().__init__("AUTOMATION / DISPATCHER")
+
+        layout = QVBoxLayout(self)
+
+        self.dispatcher_status = QLabel("Status: Starting...")
+        self.dispatcher_status.setWordWrap(True)
+        self.dispatcher_status.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        layout.addWidget(self.dispatcher_status)
+
+        self.next_status = QLabel("Next: —")
+        self.next_status.setWordWrap(True)
+        self.next_status.setStyleSheet("color: #78d6c5;")
+        layout.addWidget(self.next_status)
+
+        self.event_log = QTextEdit()
+        self.event_log.setReadOnly(True)
+        layout.addWidget(self.event_log)
+
+    def set_status(self, message):
+
+        self.dispatcher_status.setText(f"Status: {message}")
+
+    def set_next_status(self, message):
+
+        self.next_status.setText(message)
+
+    def append_log(self, message):
+
+        self.event_log.append(message)
+
+
+# ============================================================
+#                    TWITCHER CONTROL CENTER
+# ============================================================
+
+
+class LogWindow(QMainWindow):
+
+    def __init__(self, log_file):
+
+        super().__init__()
+
+        self.log_file = log_file
+
+        self.setWindowTitle("Twitcher Logs")
+        self.resize(900, 600)
+
+        self.text = QTextEdit()
+        self.text.setReadOnly(True)
+
+        self.setCentralWidget(self.text)
+
+        self.load_logs()
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.load_logs)
+        self.timer.start(1000)
+
+    def load_logs(self):
+
+        try:
+
+            if not os.path.exists(self.log_file):
+                self.text.setPlainText("No logs yet.")
+                return
+
+            with open(self.log_file, "r", encoding="utf-8") as file:
+                self.text.setPlainText(file.read())
+
+            scrollbar = self.text.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+
+        except Exception:
+            pass
 
 
 # ============================================================
@@ -82,6 +388,7 @@ class MainMenu(QMainWindow):
         # ----------------------------------------------------
 
         self.video_window = VideoWindow()
+        self.log_window = None
 
         # ----------------------------------------------------
         # RAID MONITOR
@@ -322,25 +629,11 @@ class MainMenu(QMainWindow):
     def build_interface(self):
 
         central = QWidget()
+        self.setCentralWidget(central)
 
-        self.setCentralWidget(
-            central
-        )
-
-        main_layout = QVBoxLayout(
-            central
-        )
-
-        main_layout.setContentsMargins(
-            14,
-            14,
-            14,
-            14
-        )
-
-        main_layout.setSpacing(
-            10
-        )
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(14, 14, 14, 14)
+        main_layout.setSpacing(10)
 
         # ====================================================
         # STYLE
@@ -520,455 +813,90 @@ class MainMenu(QMainWindow):
 
         header_layout = QHBoxLayout()
 
-        header = QLabel(
-            "TWITCHER"
-        )
+        header = QLabel("TWITCHER")
+        header.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
+        header.setStyleSheet("color: #aab4ff;")
+        header_layout.addWidget(header)
 
-        header.setFont(
-            QFont(
-                "Segoe UI",
-                28,
-                QFont.Weight.Bold
-            )
-        )
-
-        header.setStyleSheet(
-            "color: #aab4ff;"
-        )
-
-        header_layout.addWidget(
-            header
-        )
-
-        subtitle = QLabel(
-            "AUTOMATED STREAM CONTROL CENTER"
-        )
-
-        subtitle.setFont(
-            QFont(
-                "Segoe UI",
-                10,
-                QFont.Weight.Bold
-            )
-        )
-
-        subtitle.setStyleSheet(
-            "color: #727991;"
-        )
-
-        header_layout.addWidget(
-            subtitle
-        )
+        subtitle = QLabel("AUTOMATED STREAM CONTROL CENTER")
+        subtitle.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        subtitle.setStyleSheet("color: #727991;")
+        header_layout.addWidget(subtitle)
 
         header_layout.addStretch()
 
-        self.connection_label = QLabel(
-            "● OFFLINE"
-        )
+        self.connection_label = QLabel("● OFFLINE")
+        self.connection_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.connection_label.setStyleSheet("color: #ff7777;")
+        header_layout.addWidget(self.connection_label)
 
-        self.connection_label.setFont(
-            QFont(
-                "Segoe UI",
-                11,
-                QFont.Weight.Bold
-            )
-        )
+        self.logs_button = QPushButton("LOGS")
+        self.logs_button.clicked.connect(self.open_logs)
+        header_layout.addWidget(self.logs_button)
 
-        self.connection_label.setStyleSheet(
-            "color: #ff7777;"
-        )
+        self.reauth_button = QPushButton("RE-AUTH")
+        self.reauth_button.clicked.connect(self.reauthenticate)
+        header_layout.addWidget(self.reauth_button)
 
-        header_layout.addWidget(
-            self.connection_label
-        )
-
-        main_layout.addLayout(
-            header_layout
-        )
+        main_layout.addLayout(header_layout)
 
         # ====================================================
-        # STREAM CARDS
+        # CURRENT + NEXT
         # ====================================================
 
         stream_cards = QHBoxLayout()
+        stream_cards.setSpacing(10)
 
-        stream_cards.setSpacing(
-            10
-        )
+        self.current_panel = CurrentWatchingPanel()
+        self.next_panel = NextStreamPanel()
 
-        # ====================================================
-        # CURRENT STREAM
-        # ====================================================
+        stream_cards.addWidget(self.current_panel, 1)
+        stream_cards.addWidget(self.next_panel, 1)
 
-        current_card = QFrame()
-
-        current_card.setObjectName(
-            "CurrentCard"
-        )
-
-        current_layout = QVBoxLayout(
-            current_card
-        )
-
-        current_title = QLabel(
-            "▶  CURRENTLY WATCHING"
-        )
-
-        current_title.setFont(
-            QFont(
-                "Segoe UI",
-                12,
-                QFont.Weight.Bold
-            )
-        )
-
-        current_title.setStyleSheet(
-            "color: #9daaff;"
-        )
-
-        current_layout.addWidget(
-            current_title
-        )
-
-        self.channel_label = QLabel(
-            "—"
-        )
-
-        self.channel_label.setFont(
-            QFont(
-                "Segoe UI",
-                20,
-                QFont.Weight.Bold
-            )
-        )
-
-        current_layout.addWidget(
-            self.channel_label
-        )
-
-        self.viewers_label = QLabel(
-            "👁 — viewers"
-        )
-
-        self.category_label = QLabel(
-            "🎮 —"
-        )
-
-        self.uptime_label = QLabel(
-            "⏱ —"
-        )
-
-        self.title_label = QLabel(
-            "—"
-        )
-
-        self.title_label.setWordWrap(
-            True
-        )
-
-        self.title_label.setStyleSheet(
-            "color: #a8adbd;"
-        )
-
-        current_layout.addWidget(
-            self.viewers_label
-        )
-
-        current_layout.addWidget(
-            self.category_label
-        )
-
-        current_layout.addWidget(
-            self.uptime_label
-        )
-
-        current_layout.addWidget(
-            self.title_label
-        )
-
-        stream_cards.addWidget(
-            current_card,
-            1
-        )
+        main_layout.addLayout(stream_cards)
 
         # ====================================================
-        # NEXT STREAM
-        # ====================================================
-
-        next_card = QFrame()
-
-        next_card.setObjectName(
-            "NextCard"
-        )
-
-        next_layout = QVBoxLayout(
-            next_card
-        )
-
-        next_header = QLabel(
-            "⏭  NEXT STREAM"
-        )
-
-        next_header.setFont(
-            QFont(
-                "Segoe UI",
-                12,
-                QFont.Weight.Bold
-            )
-        )
-
-        next_header.setStyleSheet(
-            "color: #78d6c5;"
-        )
-
-        next_layout.addWidget(
-            next_header
-        )
-
-        self.next_channel_label = QLabel(
-            "No next stream selected"
-        )
-
-        self.next_channel_label.setFont(
-            QFont(
-                "Segoe UI",
-                20,
-                QFont.Weight.Bold
-            )
-        )
-
-        next_layout.addWidget(
-            self.next_channel_label
-        )
-
-        self.next_viewers_label = QLabel(
-            "👁 — viewers"
-        )
-
-        self.next_category_label = QLabel(
-            "🎮 —"
-        )
-
-        self.next_reason_label = QLabel(
-            "Waiting for live channels..."
-        )
-
-        self.next_reason_label.setWordWrap(
-            True
-        )
-
-        self.next_reason_label.setStyleSheet(
-            "color: #8baea8;"
-        )
-
-        next_layout.addWidget(
-            self.next_viewers_label
-        )
-
-        next_layout.addWidget(
-            self.next_category_label
-        )
-
-        next_layout.addWidget(
-            self.next_reason_label
-        )
-
-        stream_cards.addWidget(
-            next_card,
-            1
-        )
-
-        main_layout.addLayout(
-            stream_cards
-        )
-
-        # ====================================================
-        # THREE COLUMNS
+        # MAIN COLUMNS
         # ====================================================
 
         middle_layout = QHBoxLayout()
+        middle_layout.setSpacing(10)
 
-        middle_layout.setSpacing(
-            10
+        self.live_followed_panel = LiveFollowedPanel()
+        self.live_followed_panel.channel_selected.connect(self.channel_selected)
+        self.live_followed_panel.refresh_requested.connect(self.load_live_channels)
+        self.live_followed_panel.watch_requested.connect(self.watch_selected)
+        self.live_followed_panel.stop_requested.connect(self.stop_video)
+
+        self.chat_panel = ChatPanel(
+            access_token=os.getenv("TWITCH_ACCESS_TOKEN", "")
         )
 
-        main_layout.addLayout(
-            middle_layout,
-            1
-        )
+        self.dispatcher_panel = DispatcherPanel()
 
-        # ====================================================
-        # LEFT: CHANNELS
-        # ====================================================
+        middle_layout.addWidget(self.live_followed_panel, 25)
+        middle_layout.addWidget(self.chat_panel, 50)
+        middle_layout.addWidget(self.dispatcher_panel, 25)
 
-        channels_box = QGroupBox(
-            "LIVE FOLLOWED CHANNELS"
-        )
+        main_layout.addLayout(middle_layout, 1)
 
-        channels_layout = QVBoxLayout(
-            channels_box
-        )
+        # Compatibility aliases for legacy references
+        self.channel_list = self.live_followed_panel.channel_list
+        self.chat_widget = self.chat_panel.chat_widget
+        self.dispatcher_status = self.dispatcher_panel.dispatcher_status
+        self.next_status = self.dispatcher_panel.next_status
+        self.event_log = self.dispatcher_panel.event_log
 
-        self.channel_list = QListWidget()
+        self.channel_label = self.current_panel.channel_label
+        self.viewers_label = self.current_panel.viewers_label
+        self.category_label = self.current_panel.category_label
+        self.uptime_label = self.current_panel.uptime_label
+        self.title_label = self.current_panel.title_label
 
-        self.channel_list.itemClicked.connect(
-            self.channel_selected
-        )
-
-        channels_layout.addWidget(
-            self.channel_list
-        )
-
-        self.refresh_button = QPushButton(
-            "⟳  REFRESH LIVE CHANNELS"
-        )
-
-        self.refresh_button.clicked.connect(
-            self.load_live_channels
-        )
-
-        channels_layout.addWidget(
-            self.refresh_button
-        )
-
-        self.watch_button = QPushButton(
-            "▶  WATCH SELECTED"
-        )
-
-        self.watch_button.clicked.connect(
-            self.watch_selected
-        )
-
-        channels_layout.addWidget(
-            self.watch_button
-        )
-
-        self.stop_button = QPushButton(
-            "■  STOP VIDEO"
-        )
-
-        self.stop_button.clicked.connect(
-            self.stop_video
-        )
-
-        channels_layout.addWidget(
-            self.stop_button
-        )
-
-        middle_layout.addWidget(
-            channels_box,
-            25
-        )
-
-        # ====================================================
-        # CENTER: CHAT
-        # ====================================================
-
-        chat_box = QGroupBox(
-            "TWITCH CHAT"
-        )
-
-        chat_layout = QVBoxLayout(
-            chat_box
-        )
-
-        twitch_token = os.getenv(
-            "TWITCH_ACCESS_TOKEN",
-            ""
-        )
-
-        self.chat_widget = ChatWidget(
-            username="",
-            access_token=twitch_token
-        )
-
-        self.chat_widget.setStyleSheet(
-
-            """
-
-            QTextEdit,
-            QListWidget,
-            QPlainTextEdit {
-
-                font-size: 18px;
-
-            }
-
-            """
-
-        )
-
-        chat_layout.addWidget(
-            self.chat_widget
-        )
-
-        middle_layout.addWidget(
-            chat_box,
-            50
-        )
-
-        # ====================================================
-        # RIGHT: AUTOMATION
-        # ====================================================
-
-        dispatcher_box = QGroupBox(
-            "AUTOMATION / DISPATCHER"
-        )
-
-        dispatcher_layout = QVBoxLayout(
-            dispatcher_box
-        )
-
-        self.dispatcher_status = QLabel(
-            "Status: Starting..."
-        )
-
-        self.dispatcher_status.setWordWrap(
-            True
-        )
-
-        self.dispatcher_status.setFont(
-            QFont(
-                "Segoe UI",
-                12,
-                QFont.Weight.Bold
-            )
-        )
-
-        dispatcher_layout.addWidget(
-            self.dispatcher_status
-        )
-
-        self.next_status = QLabel(
-            "Next: —"
-        )
-
-        self.next_status.setWordWrap(
-            True
-        )
-
-        self.next_status.setStyleSheet(
-            "color: #78d6c5;"
-        )
-
-        dispatcher_layout.addWidget(
-            self.next_status
-        )
-
-        self.event_log = QTextEdit()
-
-        self.event_log.setReadOnly(
-            True
-        )
-
-        dispatcher_layout.addWidget(
-            self.event_log
-        )
-
-        middle_layout.addWidget(
-            dispatcher_box,
-            25
-        )
+        self.next_channel_label = self.next_panel.next_channel_label
+        self.next_viewers_label = self.next_panel.next_viewers_label
+        self.next_category_label = self.next_panel.next_category_label
+        self.next_reason_label = self.next_panel.next_reason_label
 
     # ========================================================
     # LOGGING
@@ -983,6 +911,63 @@ class MainMenu(QMainWindow):
         self.event_log.append(
             f"[{timestamp}] {message}"
         )
+
+    # ========================================================
+    # LOG WINDOW
+
+    def open_logs(self):
+
+        if self.log_window is None:
+            self.log_window = LogWindow(
+                LOG_FILE
+            )
+
+        self.log_window.show()
+        self.log_window.raise_()
+        self.log_window.activateWindow()
+
+    # ========================================================
+    # RE-AUTHENTICATE
+
+    def reauthenticate(self):
+
+        try:
+
+            import subprocess
+            import sys
+
+            script = os.path.join(
+                os.path.dirname(__file__),
+                "twitch_auth.py"
+            )
+
+            subprocess.Popen([
+                sys.executable,
+                script
+            ])
+
+            self.log(
+                "Started Twitch auth flow in a separate process."
+            )
+
+            QMessageBox.information(
+                self,
+                "Re-authenticate",
+                "Twitch auth has been started in a new window.\n"
+                "Complete the browser login to update the token."
+            )
+
+        except Exception as error:
+
+            self.log(
+                f"RE-AUTH ERROR: {error}"
+            )
+
+            QMessageBox.critical(
+                self,
+                "Re-authenticate Failed",
+                str(error)
+            )
 
     # ========================================================
     # DISPATCHER STATUS
@@ -1170,44 +1155,9 @@ class MainMenu(QMainWindow):
                 reverse=True
             )
 
-            self.channel_list.clear()
-
-            for stream in self.live_channels:
-
-                channel_name = stream.get(
-                    "user_name",
-                    "Unknown"
-                )
-
-                viewers = stream.get(
-                    "viewer_count",
-                    0
-                )
-
-                category = (
-                    stream.get(
-                        "game_name"
-                    )
-                    or
-                    "No category"
-                )
-
-                item = QListWidgetItem(
-
-                    f"  {channel_name}\n"
-                    f"  👁 {viewers:,} viewers\n"
-                    f"  🎮 {category}"
-
-                )
-
-                item.setData(
-                    Qt.ItemDataRole.UserRole,
-                    stream
-                )
-
-                self.channel_list.addItem(
-                    item
-                )
+            self.live_followed_panel.set_streams(
+                self.live_channels
+            )
 
             self.update_next_stream()
 
@@ -1426,11 +1376,7 @@ class MainMenu(QMainWindow):
     # CHANNEL SELECTED
     # ========================================================
 
-    def channel_selected(self, item):
-
-        stream = item.data(
-            Qt.ItemDataRole.UserRole
-        )
+    def channel_selected(self, stream):
 
         if not stream:
 
@@ -1842,6 +1788,8 @@ class MainMenu(QMainWindow):
     # ========================================================
 
     def closeEvent(self, event):
+
+        debug("MainMenu.closeEvent invoked")
 
         if self.is_closing:
 

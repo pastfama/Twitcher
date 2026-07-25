@@ -4,6 +4,8 @@ import os
 import requests
 from dotenv import load_dotenv
 
+from twitch_auth import SCOPES as REQUIRED_SCOPES
+
 
 # ============================================================
 #                    CONFIGURATION
@@ -240,11 +242,37 @@ class TwitchTokenManager:
                     "[TWITCH AUTH] Token scopes:"
                 )
 
+                scopes = data.get(
+                    "scopes",
+                    []
+                ) or []
+
                 print(
                     f"          "
-                    f"{data.get('scopes', [])}"
+                    f"{scopes}"
                 )
 
+                missing_scopes = [
+                    scope
+                    for scope in REQUIRED_SCOPES
+                    if scope not in scopes
+                ]
+
+                if missing_scopes:
+
+                    print()
+
+                    print(
+                        "[TWITCH AUTH] Token is missing required scopes:"
+                    )
+
+                    for scope in missing_scopes:
+
+                        print(
+                            f"          {scope}"
+                        )
+
+                    return False
 
                 return True
 
@@ -280,9 +308,11 @@ class TwitchTokenManager:
     # ========================================================
 
 
-    @staticmethod
+    @classmethod
     def refresh_token(
-        refresh_token_value
+        cls,
+        refresh_token_value,
+        previous_scope=None
     ):
 
         if not CLIENT_ID:
@@ -473,6 +503,13 @@ class TwitchTokenManager:
                 "refresh_token"
             ),
 
+            "scope":
+
+            new_token_data.get(
+                "scope",
+                previous_scope
+            ),
+
         }
 
 
@@ -487,7 +524,7 @@ class TwitchTokenManager:
             ]
 
 
-        save_token(
+        cls.save_token(
             self_token_data
         )
 
@@ -590,7 +627,10 @@ class TwitchTokenManager:
 
         new_token_data = (
             cls.refresh_token(
-                refresh_token_value
+                refresh_token_value,
+                previous_scope=token_data.get(
+                    "scope"
+                )
             )
         )
 

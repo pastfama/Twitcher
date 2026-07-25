@@ -7952,3 +7952,428 @@
 [2026-07-25 00:06:07] [RAID] Creating Twitch raid subscription...
 [2026-07-25 00:06:08] [RAID] 🟢 Monitoring raids from #zheka_pirate25
 [2026-07-25 00:06:10] CHANNEL REFRESH ERROR: ('Connection aborted.', ConnectionResetError(10054, 'An existing connection was forcibly closed by the remote host', None, 10054, None))
+[2026-07-25 00:51:27] [STREAM] Dispatcher ready.
+[2026-07-25 00:51:28] Logged in as DJdive
+[2026-07-25 00:51:29] Resuming last channel: #zheka_pirate25
+[2026-07-25 00:51:29] Switching to #zheka_pirate25
+[2026-07-25 00:51:32] [STREAM] Switching to #zheka_pirate25...
+[2026-07-25 00:51:32] [STREAM] Loading stream: #zheka_pirate25
+[2026-07-25 00:51:32] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:32] [STREAM] ▶ Watching #zheka_pirate25
+[2026-07-25 00:51:32] [STREAM] Stream switched successfully to #zheka_pirate25.
+[2026-07-25 00:51:33] Chat connecting to #zheka_pirate25
+[2026-07-25 00:51:33] [RAID] Raid monitor started for zheka_pirate25
+[2026-07-25 00:51:34] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:34] [RAID] Connecting to Twitch EventSub for zheka_pirate25...
+[2026-07-25 00:51:34] [RAID] EventSub WebSocket connected for zheka_pirate25
+[2026-07-25 00:51:34] [RAID] EventSub session established.
+[2026-07-25 00:51:35] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:35] [RAID] Resolved zheka_pirate25 to Twitch ID 1255113815
+[2026-07-25 00:51:35] [RAID] Creating Twitch raid subscription...
+[2026-07-25 00:51:35] [RAID] 🟢 Monitoring raids from #zheka_pirate25
+[2026-07-25 00:51:37] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:39] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:41] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:43] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:45] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:47] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:49] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:51] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:53] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:55] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:57] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:51:59] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:01] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:03] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:05] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:07] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:09] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:11] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:13] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:15] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:17] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:19] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:21] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:23] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:25] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:27] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:29] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:31] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:33] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:35] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:37] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:39] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:41] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:43] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:45] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:47] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:49] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:51] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:53] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:55] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:57] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:52:59] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:01] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:03] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:05] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:07] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:09] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:11] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:13] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:15] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:17] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:19] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:21] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:23] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:25] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:27] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:29] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:31] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:33] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:35] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:37] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:39] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:41] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:43] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:45] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:47] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:49] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:51] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:53] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:55] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:57] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:53:59] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:01] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:03] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:05] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:07] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:09] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:11] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:13] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:15] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:17] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:19] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:21] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:23] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:25] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:27] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:29] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:31] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:33] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:35] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:37] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:39] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:41] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:43] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:45] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:54:47] REWARDS ERROR: Twitch user OAuth token is invalid or expired.
+
+{"error":"Unauthorized","status":401,"message":"Missing scope: channel:read:redemptions or channel:manage:redemptions"}
+[2026-07-25 00:59:28] [STREAM] Dispatcher ready.
+[2026-07-25 00:59:28] Logged in as DJdive
+[2026-07-25 00:59:29] Resuming last channel: #zheka_pirate25
+[2026-07-25 00:59:29] Switching to #zheka_pirate25
+[2026-07-25 00:59:32] [STREAM] Switching to #zheka_pirate25...
+[2026-07-25 00:59:32] [STREAM] Loading stream: #zheka_pirate25
+[2026-07-25 00:59:32] [STREAM] ▶ Watching #zheka_pirate25
+[2026-07-25 00:59:32] [STREAM] Stream switched successfully to #zheka_pirate25.
+[2026-07-25 00:59:33] Chat connecting to #zheka_pirate25
+[2026-07-25 00:59:33] [RAID] Raid monitor started for zheka_pirate25
+[2026-07-25 00:59:33] [RAID] Connecting to Twitch EventSub for zheka_pirate25...
+[2026-07-25 00:59:34] [RAID] EventSub WebSocket connected for zheka_pirate25
+[2026-07-25 00:59:34] [RAID] EventSub session established.
+[2026-07-25 00:59:35] [RAID] Resolved zheka_pirate25 to Twitch ID 1255113815
+[2026-07-25 00:59:35] [RAID] Creating Twitch raid subscription...
+[2026-07-25 00:59:35] [RAID] 🟢 Monitoring raids from #zheka_pirate25
+[2026-07-25 01:54:33] [STREAM] Dispatcher ready.
+[2026-07-25 01:54:34] Logged in as DJdive
+[2026-07-25 01:54:35] Resuming last channel: #zheka_pirate25
+[2026-07-25 01:54:35] Switching to #zheka_pirate25
+[2026-07-25 01:54:37] [STREAM] Switching to #zheka_pirate25...
+[2026-07-25 01:54:37] [STREAM] Loading stream: #zheka_pirate25
+[2026-07-25 01:54:37] [STREAM] ▶ Watching #zheka_pirate25
+[2026-07-25 01:54:37] [STREAM] Stream switched successfully to #zheka_pirate25.
+[2026-07-25 01:54:39] Chat connecting to #zheka_pirate25
+[2026-07-25 01:54:39] [RAID] Raid monitor started for zheka_pirate25
+[2026-07-25 01:54:39] [RAID] Connecting to Twitch EventSub for zheka_pirate25...
+[2026-07-25 01:54:40] [RAID] EventSub WebSocket connected for zheka_pirate25
+[2026-07-25 01:54:40] [RAID] EventSub session established.
+[2026-07-25 01:54:40] [RAID] Resolved zheka_pirate25 to Twitch ID 1255113815
+[2026-07-25 01:54:40] [RAID] Creating Twitch raid subscription...
+[2026-07-25 01:54:40] [RAID] 🟢 Monitoring raids from #zheka_pirate25
+[2026-07-25 02:14:51] [STREAM] Dispatcher ready.
+[2026-07-25 02:14:52] Logged in as DJdive
+[2026-07-25 02:14:53] Resuming last channel: #zheka_pirate25
+[2026-07-25 02:14:53] Switching to #zheka_pirate25
+[2026-07-25 02:14:56] [STREAM] Switching to #zheka_pirate25...
+[2026-07-25 02:14:56] [STREAM] Loading stream: #zheka_pirate25
+[2026-07-25 02:14:56] [STREAM] ▶ Watching #zheka_pirate25
+[2026-07-25 02:14:56] [STREAM] Stream switched successfully to #zheka_pirate25.
+[2026-07-25 02:14:58] Chat connecting to #zheka_pirate25
+[2026-07-25 02:14:58] [RAID] Raid monitor started for zheka_pirate25
+[2026-07-25 02:14:58] [RAID] Connecting to Twitch EventSub for zheka_pirate25...
+[2026-07-25 02:14:59] [RAID] EventSub WebSocket connected for zheka_pirate25
+[2026-07-25 02:14:59] [RAID] EventSub session established.
+[2026-07-25 02:14:59] [RAID] Resolved zheka_pirate25 to Twitch ID 1255113815
+[2026-07-25 02:14:59] [RAID] Creating Twitch raid subscription...
+[2026-07-25 02:14:59] [RAID] 🟢 Monitoring raids from #zheka_pirate25
+[2026-07-25 02:17:33] [STREAM] Dispatcher ready.
+[2026-07-25 02:17:33] Logged in as DJdive
+[2026-07-25 02:17:34] Resuming last channel: #zheka_pirate25
+[2026-07-25 02:17:34] Switching to #zheka_pirate25
+[2026-07-25 02:17:37] [STREAM] Switching to #zheka_pirate25...
+[2026-07-25 02:17:37] [STREAM] Loading stream: #zheka_pirate25
+[2026-07-25 02:17:37] [STREAM] ▶ Watching #zheka_pirate25
+[2026-07-25 02:17:37] [STREAM] Stream switched successfully to #zheka_pirate25.
+[2026-07-25 02:17:38] Chat connecting to #zheka_pirate25
+[2026-07-25 02:17:38] [RAID] Raid monitor started for zheka_pirate25
+[2026-07-25 02:17:39] [RAID] Connecting to Twitch EventSub for zheka_pirate25...
+[2026-07-25 02:17:40] [RAID] EventSub WebSocket connected for zheka_pirate25
+[2026-07-25 02:17:40] [RAID] EventSub session established.
+[2026-07-25 02:17:40] [RAID] Resolved zheka_pirate25 to Twitch ID 1255113815
+[2026-07-25 02:17:40] [RAID] Creating Twitch raid subscription...
+[2026-07-25 02:17:40] [RAID] 🟢 Monitoring raids from #zheka_pirate25
+[2026-07-25 02:19:41] [STREAM] Dispatcher ready.
+[2026-07-25 02:19:42] Logged in as DJdive
+[2026-07-25 02:19:43] Resuming last channel: #zheka_pirate25
+[2026-07-25 02:19:43] Switching to #zheka_pirate25
+[2026-07-25 02:19:46] [STREAM] Switching to #zheka_pirate25...
+[2026-07-25 02:19:46] [STREAM] Loading stream: #zheka_pirate25
+[2026-07-25 02:19:46] [STREAM] ▶ Watching #zheka_pirate25
+[2026-07-25 02:19:46] [STREAM] Stream switched successfully to #zheka_pirate25.
+[2026-07-25 02:19:48] Chat connecting to #zheka_pirate25
+[2026-07-25 02:19:48] [RAID] Raid monitor started for zheka_pirate25
+[2026-07-25 02:19:48] [RAID] Connecting to Twitch EventSub for zheka_pirate25...
+[2026-07-25 02:19:49] [RAID] EventSub WebSocket connected for zheka_pirate25
+[2026-07-25 02:19:49] [RAID] EventSub session established.
+[2026-07-25 02:19:49] [RAID] Resolved zheka_pirate25 to Twitch ID 1255113815
+[2026-07-25 02:19:49] [RAID] Creating Twitch raid subscription...
+[2026-07-25 02:19:49] [RAID] 🟢 Monitoring raids from #zheka_pirate25
+[2026-07-25 02:33:16] [STREAM] Dispatcher ready.
+[2026-07-25 02:33:17] Logged in as DJdive
+[2026-07-25 02:33:18] Resuming last channel: #zheka_pirate25
+[2026-07-25 02:33:18] Switching to #zheka_pirate25
+[2026-07-25 02:33:20] [STREAM] Switching to #zheka_pirate25...
+[2026-07-25 02:33:20] [STREAM] Loading stream: #zheka_pirate25
+[2026-07-25 02:33:20] [STREAM] ▶ Watching #zheka_pirate25
+[2026-07-25 02:33:20] [STREAM] Stream switched successfully to #zheka_pirate25.
+[2026-07-25 02:33:22] Chat connecting to #zheka_pirate25
+[2026-07-25 02:33:22] [RAID] Raid monitor started for zheka_pirate25
+[2026-07-25 02:33:22] [RAID] Connecting to Twitch EventSub for zheka_pirate25...
+[2026-07-25 02:33:23] [RAID] EventSub WebSocket connected for zheka_pirate25
+[2026-07-25 02:33:23] [RAID] EventSub session established.
+[2026-07-25 02:33:23] [RAID] Resolved zheka_pirate25 to Twitch ID 1255113815
+[2026-07-25 02:33:23] [RAID] Creating Twitch raid subscription...
+[2026-07-25 02:33:23] [RAID] 🟢 Monitoring raids from #zheka_pirate25
+[2026-07-25 02:35:37] [STREAM] Dispatcher ready.
+[2026-07-25 02:35:37] Logged in as DJdive
+[2026-07-25 02:35:38] Resuming last channel: #zheka_pirate25
+[2026-07-25 02:35:38] Switching to #zheka_pirate25
+[2026-07-25 02:35:41] [STREAM] Switching to #zheka_pirate25...
+[2026-07-25 02:35:41] [STREAM] Loading stream: #zheka_pirate25
+[2026-07-25 02:35:41] [STREAM] ▶ Watching #zheka_pirate25
+[2026-07-25 02:35:41] [STREAM] Stream switched successfully to #zheka_pirate25.
+[2026-07-25 02:35:42] Chat connecting to #zheka_pirate25
+[2026-07-25 02:35:42] [RAID] Raid monitor started for zheka_pirate25
+[2026-07-25 02:35:43] [RAID] Connecting to Twitch EventSub for zheka_pirate25...
+[2026-07-25 02:35:44] [RAID] EventSub WebSocket connected for zheka_pirate25
+[2026-07-25 02:35:44] [RAID] EventSub session established.
+[2026-07-25 02:35:44] [RAID] Resolved zheka_pirate25 to Twitch ID 1255113815
+[2026-07-25 02:35:44] [RAID] Creating Twitch raid subscription...
+[2026-07-25 02:35:44] [RAID] 🟢 Monitoring raids from #zheka_pirate25
