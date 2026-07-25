@@ -427,6 +427,16 @@ def start_twitcher(
 
             video_window.place_on_primary_monitor()
 
+        video_window.show()
+
+        print()
+
+        print(
+
+            "[WINDOW] Video Window shown"
+
+        )
+
 
     # --------------------------------------------------------
     # READY
@@ -545,12 +555,15 @@ def main():
 
         if os.environ.get("TWITCHER_WATCH") == "1":
             debug("Watch mode enabled; starting source watcher")
+            root = Path(__file__).parent
+            skip = {".venv", "venv", "__pycache__", ".git", "build", "dist"}
             watch_files_and_exit_on_change([
                 __file__,
                 *sorted({
                     str(path)
-                    for path in Path(__file__).parent.glob("*.py")
+                    for path in root.rglob("*.py")
                     if path.name != Path(__file__).name
+                    and not skip.intersection(path.relative_to(root).parts)
                 })
             ])
 

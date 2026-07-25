@@ -130,8 +130,6 @@ class VideoWindow(QWidget):
 
         self.video_frame.installEventFilter(self)
 
-        self.top_bar.installEventFilter(self)
-
         self.control_bar.installEventFilter(self)
 
         # ====================================================
@@ -184,9 +182,11 @@ class VideoWindow(QWidget):
 
             QFrame#controlBar {
 
-                background-color: #101019;
+                background-color: rgba(16, 16, 25, 180);
 
-                border-top: 1px solid #29293d;
+                border: 1px solid rgba(41, 41, 61, 150);
+
+                border-radius: 10px;
 
             }
 
@@ -342,73 +342,16 @@ class VideoWindow(QWidget):
         # MAIN LAYOUT
         # ====================================================
 
-        main_layout = QVBoxLayout(self)
-
-        main_layout.setContentsMargins(
-            0,
-            0,
-            0,
-            0
-        )
-
-        main_layout.setSpacing(0)
-
-        # ====================================================
-        # TOP BAR
-        # ====================================================
-
-        self.top_bar = QFrame()
-
-        self.top_bar.setObjectName(
-            "topBar"
-        )
-
-        top_layout = QHBoxLayout(
-            self.top_bar
-        )
-
-        top_layout.setContentsMargins(
-            14,
-            8,
-            14,
-            8
-        )
-
-        self.title_label = QLabel(
-            "TWITCHER // STREAM MONITOR"
-        )
-
-        self.title_label.setObjectName(
-            "appTitle"
-        )
-
-        top_layout.addWidget(
-            self.title_label
-        )
-
-        top_layout.addStretch()
-
-        self.status_label = QLabel(
-            "● READY"
-        )
-
-        self.status_label.setObjectName(
-            "statusLabel"
-        )
-
-        top_layout.addWidget(
-            self.status_label
-        )
-
-        main_layout.addWidget(
-            self.top_bar
-        )
+        # We use no main layout to allow manual positioning of overlays
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
 
         # ====================================================
         # VIDEO FRAME
         # ====================================================
 
-        self.video_frame = QWidget()
+        self.video_frame = QWidget(self)
 
         self.video_frame.setAttribute(
             Qt.WidgetAttribute.WA_NativeWindow
@@ -427,16 +370,15 @@ class VideoWindow(QWidget):
             "background-color: #000000;"
         )
 
-        main_layout.addWidget(
-            self.video_frame,
-            1
+        self.main_layout.addWidget(
+            self.video_frame
         )
 
         # ====================================================
-        # NORMAL CONTROL BAR
+        # NORMAL CONTROL BAR (OVERLAY)
         # ====================================================
 
-        self.control_bar = QFrame()
+        self.control_bar = QFrame(self)
 
         self.control_bar.setObjectName(
             "controlBar"
@@ -598,6 +540,22 @@ class VideoWindow(QWidget):
 
         controls.addStretch()
 
+        # STATUS
+
+        self.status_label = QLabel(
+            "● IDLE"
+        )
+
+        self.status_label.setObjectName(
+            "statusLabel"
+        )
+
+        controls.addWidget(
+            self.status_label
+        )
+
+        controls.addStretch()
+
         # SMALL SIZE
 
         self.small_button = QPushButton(
@@ -652,9 +610,7 @@ class VideoWindow(QWidget):
             self.fullscreen_button
         )
 
-        main_layout.addWidget(
-            self.control_bar
-        )
+        # Do NOT add to layout, we will position it manually
 
         # ====================================================
         # FULLSCREEN FLOATING VOLUME CONTROLS
@@ -1352,8 +1308,6 @@ class VideoWindow(QWidget):
 
         self.showFullScreen()
 
-        self.top_bar.hide()
-
         self.control_bar.hide()
 
         self.show_fullscreen_controls()
@@ -1367,8 +1321,6 @@ class VideoWindow(QWidget):
         self.hide_fullscreen_controls()
 
         self.showNormal()
-
-        self.top_bar.show()
 
         self.control_bar.show()
 
@@ -1421,6 +1373,40 @@ class VideoWindow(QWidget):
         self.fullscreen_overlay.hide()
 
         self.fullscreen_controls_visible = False
+
+    # ========================================================
+    # OVERLAY POSITIONING
+    # ========================================================
+
+    def resizeEvent(self, event):
+
+        super().resizeEvent(event)
+
+        # ----------------------------------------------------
+        # POSITION CONTROL BAR
+        # ----------------------------------------------------
+
+        if self.control_bar:
+
+            margin = 20
+
+            self.control_bar.adjustSize()
+
+            bar_width = min(
+                self.width() - (margin * 2),
+                800
+            )
+
+            bar_height = self.control_bar.height()
+
+            self.control_bar.setGeometry(
+                (self.width() - bar_width) // 2,
+                self.height() - bar_height - margin,
+                bar_width,
+                bar_height
+            )
+
+            self.control_bar.raise_()
 
     # ========================================================
     # EVENT FILTER

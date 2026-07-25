@@ -3,9 +3,13 @@ twitch_token.json
 
 __pycache__/
 *.pyc
+.venv/
 
 .vscode/
 .idea/
+*.vsix
+
+*.log
 
 stream.ts
 last_channel.txt

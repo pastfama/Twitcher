@@ -423,6 +423,8 @@ class StreamDispatcher:
 
         to_streamer,
 
+        url=None,
+
     ):
 
         from_streamer = (
@@ -495,11 +497,16 @@ class StreamDispatcher:
 
         try:
 
-            url = self.api.get_stream_url(
+            # Callers on the GUI thread resolve the URL in a worker and pass it
+            # in; resolving here would block the event loop.
 
-                to_streamer
+            if not url:
 
-            )
+                url = self.api.get_stream_url(
+
+                    to_streamer
+
+                )
 
             switched = self.switch_stream(
 

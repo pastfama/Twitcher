@@ -1,4 +1,3 @@
-import datetime
 from datetime import datetime, timezone
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel

@@ -1,11 +1,9 @@
 import os
-from datetime import datetime, timezone
+import subprocess
+import sys
+from datetime import datetime
 
-from PySide6.QtCore import (
-    Qt,
-    QSettings,
-    QTimer,
-)
+from PySide6.QtCore import QSettings
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -14,17 +12,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QPushButton,
-    QGroupBox,
-    QTextEdit,
     QMessageBox,
-    QFrame,
 )
 
-from chat import ChatWidget
-from logger import debug, info, warning, error
+from logger import debug, LOG_FILE
 from video import VideoWindow
 from dispatcher import StreamDispatcher
 from raid_monitor import RaidMonitor
@@ -33,9 +25,12 @@ from .next_stream import NextStreamPanel
 from .live_followed import LiveFollowedPanel
 from .chat_panel import ChatPanel
 from .dispatcher_panel import DispatcherPanel
+from .log_window import LogWindow
+from .style import MAIN_WINDOW_STYLESHEET
+from .workers import run_in_background, wait_for_pending
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(BASE_DIR, "..", "twitcher.log")
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
 
 class MainMenu(QMainWindow):
@@ -60,6 +55,8 @@ class MainMenu(QMainWindow):
         self.resume_attempted = False
         self.is_closing = False
         self.raid_transition_active = False
+        self.is_loading_channels = False
+        self.pending_channel = None
 
         self.video_window = VideoWindow()
         self.log_window = None
@@ -97,8 +94,8 @@ class MainMenu(QMainWindow):
                 if self.restoreGeometry(geometry):
                     self.log("Control Center geometry restored.")
                     return
-            except Exception as error:
-                self.log(f"Could not restore geometry: {error}")
+            except Exception as exc:
+                self.log(f"Could not restore geometry: {exc}")
 
         self.log("No saved Control Center geometry.")
 
@@ -106,8 +103,8 @@ class MainMenu(QMainWindow):
         try:
             self.settings.setValue("main_window_geometry", self.saveGeometry())
             self.settings.sync()
-        except Exception as error:
-            print(f"[SETTINGS] Could not save geometry: {error}")
+        except Exception as exc:
+            print(f"[SETTINGS] Could not save geometry: {exc}")
 
     # ========================================================
     # LAST STREAMER
@@ -174,84 +171,7 @@ class MainMenu(QMainWindow):
         main_layout.setContentsMargins(14, 14, 14, 14)
         main_layout.setSpacing(10)
 
-        self.setStyleSheet(
-            """
-            QMainWindow,
-            QWidget {
-                background-color: #08090f;
-                color: #f2f2f5;
-                font-family: "Segoe UI";
-            }
-            QGroupBox {
-                background-color: #10121c;
-                border: 1px solid #292d42;
-                border-radius: 12px;
-                margin-top: 12px;
-                padding: 10px;
-                font-size: 13px;
-                font-weight: bold;
-                color: #aeb8ff;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 14px;
-                padding: 0 8px;
-                background-color: #08090f;
-            }
-            QLabel {
-                color: #eeeeF5;
-            }
-            QPushButton {
-                background-color: #191c2c;
-                color: #ffffff;
-                border: 1px solid #353a58;
-                border-radius: 8px;
-                padding: 10px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #272c48;
-                border: 1px solid #5964a0;
-            }
-            QPushButton:pressed {
-                background-color: #10121e;
-            }
-            QListWidget {
-                background-color: #0c0e16;
-                border: 1px solid #292d42;
-                border-radius: 8px;
-                padding: 5px;
-            }
-            QListWidget::item {
-                padding: 12px;
-                border-bottom: 1px solid #1e2232;
-            }
-            QListWidget::item:hover {
-                background-color: #181c2d;
-            }
-            QListWidget::item:selected {
-                background-color: #30385e;
-                border-left: 3px solid #7f8cff;
-            }
-            QTextEdit {
-                background-color: #0b0d14;
-                border: 1px solid #292d42;
-                border-radius: 8px;
-                color: #eeeeF5;
-                padding: 8px;
-            }
-            QFrame#CurrentCard {
-                background-color: #141827;
-                border: 1px solid #3c456b;
-                border-radius: 14px;
-            }
-            QFrame#NextCard {
-                background-color: #101c1b;
-                border: 1px solid #315f58;
-                border-radius: 14px;
-            }
-            """
-        )
+        self.setStyleSheet(MAIN_WINDOW_STYLESHEET)
 
         header_layout = QHBoxLayout()
         header = QLabel("TWITCHER")
@@ -310,29 +230,13 @@ class MainMenu(QMainWindow):
 
         main_layout.addLayout(middle_layout, 1)
 
-        self.channel_list = self.live_followed_panel.channel_list
-        self.chat_widget = self.chat_panel.chat_widget
-        self.dispatcher_status = self.dispatcher_panel.dispatcher_status
-        self.next_status = self.dispatcher_panel.next_status
-        self.event_log = self.dispatcher_panel.event_log
-
-        self.channel_label = self.current_panel.channel_label
-        self.viewers_label = self.current_panel.viewers_label
-        self.category_label = self.current_panel.category_label
-        self.uptime_label = self.current_panel.uptime_label
-        self.title_label = self.current_panel.title_label
-
-        self.next_channel_label = self.next_panel.next_channel_label
-        self.next_viewers_label = self.next_panel.next_viewers_label
-        self.next_category_label = self.next_panel.next_category_label
-        self.next_reason_label = self.next_panel.next_reason_label
-
     # ========================================================
     # LOGGING
+    # ========================================================
 
     def log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.event_log.append(f"[{timestamp}] {message}")
+        self.dispatcher_panel.append_log(f"[{timestamp}] {message}")
 
     def open_logs(self):
         if self.log_window is None:
@@ -342,11 +246,18 @@ class MainMenu(QMainWindow):
         self.log_window.activateWindow()
 
     def reauthenticate(self):
-        try:
-            import subprocess
-            import sys
+        script = os.path.join(PROJECT_ROOT, "twitch_auth.py")
 
-            script = os.path.join(os.path.dirname(__file__), "twitch_auth.py")
+        if not os.path.exists(script):
+            self.log(f"RE-AUTH ERROR: {script} not found.")
+            QMessageBox.critical(
+                self,
+                "Re-authenticate Failed",
+                f"Could not find twitch_auth.py at:\n{script}"
+            )
+            return
+
+        try:
             subprocess.Popen([sys.executable, script])
             self.log("Started Twitch auth flow in a separate process.")
             QMessageBox.information(
@@ -354,12 +265,16 @@ class MainMenu(QMainWindow):
                 "Re-authenticate",
                 "Twitch auth has been started in a new window.\nComplete the browser login to update the token."
             )
-        except Exception as error:
-            self.log(f"RE-AUTH ERROR: {error}")
-            QMessageBox.critical(self, "Re-authenticate Failed", str(error))
+        except Exception as exc:
+            self.log(f"RE-AUTH ERROR: {exc}")
+            QMessageBox.critical(self, "Re-authenticate Failed", str(exc))
+
+    # ========================================================
+    # DISPATCHER CALLBACKS
+    # ========================================================
 
     def handle_dispatcher_status(self, message):
-        self.dispatcher_status.setText(f"Status: {message}")
+        self.dispatcher_panel.set_status(message)
 
     def handle_dispatcher_log(self, message):
         self.log(f"[DISPATCHER] {message}")
@@ -384,39 +299,91 @@ class MainMenu(QMainWindow):
             streamer = data.get("streamer", "unknown")
             self.log(f"📢 STREAM ANNOUNCEMENT: {streamer}")
 
+    # ========================================================
+    # TWITCH CONNECTION
+    # ========================================================
+
     def load_twitch(self):
-        try:
-            self.user = self.api.get_current_user()
-            self.connection_label.setText("● CONNECTED")
-            self.connection_label.setStyleSheet("color: #72d6a0;")
-            self.log(f"Logged in as {self.user['display_name']}")
-            self.chat_widget.username = self.user["login"]
-            self.dispatcher_status.setText("Status: Connected to Twitch")
-            self.load_live_channels()
-        except Exception as error:
-            self.connection_label.setText("● ERROR")
-            self.connection_label.setStyleSheet("color: #ff7777;")
-            self.dispatcher_status.setText("Status: Twitch connection error")
-            self.log(f"ERROR: {error}")
-            QMessageBox.critical(self, "Twitch Error", str(error))
+        self.dispatcher_panel.set_status("Connecting to Twitch...")
+        run_in_background(
+            self.api.get_current_user,
+            self.handle_user_loaded,
+            self.handle_user_failed,
+        )
+
+    def handle_user_loaded(self, user):
+        if self.is_closing:
+            return
+
+        self.user = user or {}
+        self.connection_label.setText("● CONNECTED")
+        self.connection_label.setStyleSheet("color: #72d6a0;")
+        self.log(f"Logged in as {self.user.get('display_name', 'unknown')}")
+        self.chat_panel.set_username(self.user.get("login", ""))
+        self.dispatcher_panel.set_status("Connected to Twitch")
+        self.load_live_channels()
+
+    def handle_user_failed(self, message):
+        if self.is_closing:
+            return
+
+        self.connection_label.setText("● ERROR")
+        self.connection_label.setStyleSheet("color: #ff7777;")
+        self.dispatcher_panel.set_status("Twitch connection error")
+        self.log(f"ERROR: {message}")
+        QMessageBox.critical(self, "Twitch Error", message)
+
+    # ========================================================
+    # LIVE CHANNELS
+    # ========================================================
 
     def load_live_channels(self):
         if not self.user:
             return
-        try:
-            self.dispatcher_status.setText("Status: Checking live channels...")
-            QApplication.processEvents()
-            followed = self.api.get_followed_channels(self.user["id"])
-            self.live_channels = self.api.get_live_streams(followed)
-            self.live_channels.sort(key=lambda stream: stream.get("viewer_count", 0), reverse=True)
-            self.live_followed_panel.set_streams(self.live_channels)
-            self.update_next_stream()
-            self.dispatcher_status.setText(f"Status: {len(self.live_channels)} channels live")
-            self.log(f"Found {len(self.live_channels)} live channels.")
-            self.try_resume_last_streamer()
-        except Exception as error:
-            self.dispatcher_status.setText("Status: API error")
-            self.log(f"ERROR: {error}")
+
+        if self.is_loading_channels:
+            self.log("Live channel refresh already in progress.")
+            return
+
+        self.is_loading_channels = True
+        self.dispatcher_panel.set_status("Checking live channels...")
+
+        user_id = self.user.get("id")
+
+        def fetch():
+            followed = self.api.get_followed_channels(user_id)
+            return self.api.get_live_streams(followed)
+
+        run_in_background(
+            fetch,
+            self.handle_live_channels_loaded,
+            self.handle_live_channels_failed,
+        )
+
+    def handle_live_channels_loaded(self, streams):
+        self.is_loading_channels = False
+
+        if self.is_closing:
+            return
+
+        streams = list(streams or [])
+        streams.sort(key=lambda stream: stream.get("viewer_count", 0), reverse=True)
+
+        self.live_channels = streams
+        self.live_followed_panel.set_streams(streams)
+        self.update_next_stream()
+        self.dispatcher_panel.set_status(f"{len(streams)} channels live")
+        self.log(f"Found {len(streams)} live channels.")
+        self.try_resume_last_streamer()
+
+    def handle_live_channels_failed(self, message):
+        self.is_loading_channels = False
+
+        if self.is_closing:
+            return
+
+        self.dispatcher_panel.set_status("API error")
+        self.log(f"ERROR: {message}")
 
     def try_resume_last_streamer(self):
         if self.resume_attempted:
@@ -438,7 +405,7 @@ class MainMenu(QMainWindow):
             return
         self.log(f"Resuming previous streamer: #{last_streamer}")
         self.current_stream = matching_stream
-        self.update_current_broadcast(matching_stream)
+        self.current_panel.set_stream(matching_stream)
         self.start_channel(last_streamer, manual=False, resume=True)
 
     def update_next_stream(self):
@@ -448,58 +415,36 @@ class MainMenu(QMainWindow):
             for stream in self.live_channels
             if stream.get("user_login", "").lower().strip() != current
         ]
+
         if not candidates:
             self.next_stream = None
-            self.next_channel_label.setText("No next stream available")
-            self.next_viewers_label.setText("👁 — viewers")
-            self.next_category_label.setText("🎮 —")
-            self.next_reason_label.setText("No other followed channels are currently live.")
-            self.next_status.setText("Next: No available stream")
+            self.next_panel.clear()
+            self.dispatcher_panel.set_next_status("Next: No available stream")
             return
+
         candidates.sort(key=lambda stream: stream.get("viewer_count", 0), reverse=True)
         self.next_stream = candidates[0]
+        self.next_panel.set_stream(self.next_stream)
+
         channel = self.next_stream.get("user_name", "Unknown")
         viewers = self.next_stream.get("viewer_count", 0)
-        category = self.next_stream.get("game_name") or "No category"
-        self.next_channel_label.setText(channel)
-        self.next_viewers_label.setText(f"👁 {viewers:,} viewers")
-        self.next_category_label.setText(f"🎮 {category}")
-        self.next_reason_label.setText("If the current stream ends without a raid, Twitcher will switch here.")
-        self.next_status.setText(f"Next: #{channel} ({viewers:,} viewers)")
+        self.dispatcher_panel.set_next_status(f"Next: #{channel} ({viewers:,} viewers)")
+
+    # ========================================================
+    # CHANNEL SELECTION
+    # ========================================================
 
     def channel_selected(self, stream):
         if not stream:
             return
         self.current_stream = stream
-        channel = stream.get("user_login")
-        self.update_current_broadcast(stream)
-        self.log(f"Selected {channel}")
-
-    def update_current_broadcast(self, stream):
-        channel = stream.get("user_name", "Unknown")
-        self.channel_label.setText(f"#{channel}")
-        self.viewers_label.setText(f"👁 {stream.get('viewer_count', 0):,} viewers")
-        self.category_label.setText(f"🎮 {stream.get('game_name') or 'No category'}")
-        self.title_label.setText(stream.get("title", "—"))
-        started_at = stream.get("started_at")
-        if not started_at:
-            self.uptime_label.setText("⏱ —")
-            return
-        try:
-            started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-            duration = datetime.now(timezone.utc) - started
-            total_seconds = int(duration.total_seconds())
-            hours = total_seconds // 3600
-            minutes = (total_seconds % 3600) // 60
-            self.uptime_label.setText(f"⏱ {hours}h {minutes}m")
-        except Exception:
-            self.uptime_label.setText("⏱ —")
+        self.current_panel.set_stream(stream)
+        self.log(f"Selected {stream.get('user_login')}")
 
     def connect_chat(self, channel):
         if not channel:
             return
-        self.chat_widget.channel_input.setText(channel)
-        self.chat_widget.connect_to_channel()
+        self.chat_panel.connect_chat(channel)
         self.log(f"Chat connecting to #{channel}")
 
     def watch_selected(self):
@@ -510,46 +455,106 @@ class MainMenu(QMainWindow):
         if channel:
             self.start_channel(channel, manual=True)
 
+    # ========================================================
+    # START CHANNEL
+    # ========================================================
+
     def start_channel(self, channel, manual=False, resume=False):
         if not channel:
             return
+
         channel = channel.lower().strip()
+
+        if self.pending_channel:
+            self.log(f"Still resolving #{self.pending_channel}; ignoring {channel}.")
+            return
+
         if manual:
             self.log(f"Manual channel selection: {channel}")
         elif resume:
             self.log(f"Resuming previous channel: {channel}")
         else:
             self.log(f"Automatic channel switch: {channel}")
-        try:
-            self.dispatcher_status.setText(f"Status: Resolving {channel}...")
-            QApplication.processEvents()
-            url = self.api.get_stream_url(channel)
-            if not url:
-                raise RuntimeError(f"Could not resolve stream URL for {channel}")
-            switched = self.dispatcher.switch_stream(streamer=channel, url=url, announce=manual)
-            if not switched:
-                self.log("Dispatcher rejected stream switch.")
-                return
-            self.current_channel = channel
-            self.save_last_streamer(channel)
-            self.connect_chat(channel)
-            self.raid_monitor.start(channel)
-            self.dispatcher_status.setText(f"Status: ▶ Watching {channel}")
-            self.update_next_stream()
-        except Exception as error:
-            self.dispatcher_status.setText("Status: Video error")
-            self.log(f"VIDEO ERROR: {error}")
-            QMessageBox.critical(self, "Video Error", str(error))
+
+        self.pending_channel = channel
+        self.dispatcher_panel.set_status(f"Resolving {channel}...")
+
+        run_in_background(
+            lambda: self.api.get_stream_url(channel),
+            lambda url: self.handle_stream_url_resolved(channel, url, manual),
+            lambda message: self.handle_stream_url_failed(channel, message),
+        )
+
+    def handle_stream_url_resolved(self, channel, url, manual):
+        self.pending_channel = None
+
+        if self.is_closing:
+            return
+
+        if not url:
+            self.handle_stream_url_failed(
+                channel,
+                f"Could not resolve stream URL for {channel}"
+            )
+            return
+
+        switched = self.dispatcher.switch_stream(
+            streamer=channel,
+            url=url,
+            announce=manual,
+        )
+
+        if not switched:
+            self.log("Dispatcher rejected stream switch.")
+            return
+
+        self.current_channel = channel
+        self.save_last_streamer(channel)
+        self.connect_chat(channel)
+        self.raid_monitor.start(channel)
+        self.dispatcher_panel.set_status(f"▶ Watching {channel}")
+        self.update_next_stream()
+
+    def handle_stream_url_failed(self, channel, message):
+        self.pending_channel = None
+
+        if self.is_closing:
+            return
+
+        self.dispatcher_panel.set_status("Video error")
+        self.log(f"VIDEO ERROR: {message}")
+        QMessageBox.critical(self, "Video Error", message)
+
+    # ========================================================
+    # RAIDS
+    # ========================================================
 
     def handle_raid(self, from_channel, to_channel):
         if self.raid_transition_active:
             return
+
         self.raid_transition_active = True
         self.log("================================")
         self.log(f"RAID DETECTED: {from_channel} → {to_channel}")
-        self.dispatcher_status.setText(f"Status: RAID {from_channel} → {to_channel}")
+        self.dispatcher_panel.set_status(f"RAID {from_channel} → {to_channel}")
+
+        run_in_background(
+            lambda: self.api.get_stream_url(to_channel),
+            lambda url: self.handle_raid_url_resolved(from_channel, to_channel, url),
+            self.handle_raid_switch_failed,
+        )
+
+    def handle_raid_url_resolved(self, from_channel, to_channel, url):
+        if self.is_closing:
+            self.raid_transition_active = False
+            return
+
         try:
-            switched = self.dispatcher.handle_raid(from_streamer=from_channel, to_streamer=to_channel)
+            switched = self.dispatcher.handle_raid(
+                from_streamer=from_channel,
+                to_streamer=to_channel,
+                url=url,
+            )
             if not switched:
                 self.log("Raid switch failed.")
                 return
@@ -559,17 +564,30 @@ class MainMenu(QMainWindow):
             self.raid_monitor.start(self.current_channel)
             self.log(f"Now monitoring raids from {self.current_channel}")
             self.update_next_stream()
-        except Exception as error:
-            self.log(f"RAID SWITCH ERROR: {error}")
-            self.dispatcher_status.setText("Status: Raid switch error")
+        except Exception as exc:
+            self.log(f"RAID SWITCH ERROR: {exc}")
+            self.dispatcher_panel.set_status("Raid switch error")
         finally:
             self.raid_transition_active = False
+
+    def handle_raid_switch_failed(self, message):
+        self.raid_transition_active = False
+
+        if self.is_closing:
+            return
+
+        self.log(f"RAID SWITCH ERROR: {message}")
+        self.dispatcher_panel.set_status("Raid switch error")
 
     def handle_raid_status(self, message):
         self.log(f"[RAID] {message}")
 
     def handle_raid_error(self, message):
         self.log(f"[RAID ERROR] {message}")
+
+    # ========================================================
+    # STOP
+    # ========================================================
 
     def stop_video(self):
         try:
@@ -578,13 +596,17 @@ class MainMenu(QMainWindow):
             pass
         try:
             self.dispatcher.stop()
-        except Exception as error:
-            self.log(f"Dispatcher stop error: {error}")
+        except Exception as exc:
+            self.log(f"Dispatcher stop error: {exc}")
         self.current_channel = None
         self.current_stream = None
-        self.dispatcher_status.setText("Status: Video stopped")
+        self.dispatcher_panel.set_status("Video stopped")
         self.log("Video stopped.")
         self.update_next_stream()
+
+    # ========================================================
+    # SHUTDOWN
+    # ========================================================
 
     def closeEvent(self, event):
         debug("MainMenu.closeEvent invoked")
@@ -595,8 +617,8 @@ class MainMenu(QMainWindow):
         self.save_window_geometry()
         try:
             self.video_window.save_window_state()
-        except Exception as error:
-            print(f"[SETTINGS] Could not save VideoWindow state: {error}")
+        except Exception as exc:
+            print(f"[SETTINGS] Could not save VideoWindow state: {exc}")
         try:
             self.raid_monitor.stop()
         except Exception:
@@ -606,11 +628,12 @@ class MainMenu(QMainWindow):
         except Exception:
             pass
         try:
-            self.chat_widget.disconnect()
+            self.chat_panel.disconnect_chat()
         except Exception:
             pass
         try:
             self.video_window.close()
         except Exception:
             pass
+        wait_for_pending()
         event.accept()
