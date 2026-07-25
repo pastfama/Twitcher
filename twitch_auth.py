@@ -78,6 +78,8 @@ SCOPES = [
 
     "chat:edit",
 
+    "channel:read:redemptions",
+
 ]
 
 

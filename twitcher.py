@@ -1,5 +1,9 @@
+import os
 import sys
+import time
 import traceback
+import threading
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
@@ -511,6 +515,16 @@ def main():
 
     try:
 
+        if os.environ.get("TWITCHER_WATCH") == "1":
+            watch_files_and_exit_on_change([
+                __file__,
+                *sorted({
+                    str(path)
+                    for path in Path(__file__).parent.glob("*.py")
+                    if path.name != Path(__file__).name
+                })
+            ])
+
         sys.exit(
 
             app.exec()
@@ -527,6 +541,34 @@ def main():
             error
 
         )
+
+def watch_files_and_exit_on_change(paths, interval=1.0):
+    """Exit when a watched Python source file changes.
+
+    This is a simple developer helper. Run with TWITCHER_WATCH=1 and
+    restart your app from the shell when the process exits.
+    """
+    mtimes = {}
+    for path in paths:
+        try:
+            mtimes[path] = Path(path).stat().st_mtime
+        except OSError:
+            mtimes[path] = 0
+
+    def watcher():
+        while True:
+            time.sleep(interval)
+            for path in paths:
+                try:
+                    mtime = Path(path).stat().st_mtime
+                except OSError:
+                    mtime = 0
+                if mtime != mtimes.get(path):
+                    print(f"[DEV] Source change detected: {path}")
+                    os._exit(3)
+
+    thread = threading.Thread(target=watcher, daemon=True)
+    thread.start()
 
 
 # ============================================================

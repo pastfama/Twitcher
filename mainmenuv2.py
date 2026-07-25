@@ -213,6 +213,7 @@ class MainMenu(QMainWindow):
         self.current_channel = None
         self.current_stream = None
         self.next_stream = None
+        self.current_channel_rewards = []
 
         self.resume_attempted = False
         self.is_closing = False
@@ -482,6 +483,21 @@ class MainMenu(QMainWindow):
             "color: #a8adbd;"
         )
 
+        self.points_label = QLabel(
+            "✦ — channel points"
+        )
+        self.points_label.setStyleSheet(
+            "color: #8baea8;"
+        )
+
+        self.rewards_label = QLabel(
+            "🎁 — channel rewards"
+        )
+        self.rewards_label.setWordWrap(True)
+        self.rewards_label.setStyleSheet(
+            "color: #8baea8;"
+        )
+
         current_layout.addWidget(
             self.channel_label
         )
@@ -496,6 +512,12 @@ class MainMenu(QMainWindow):
         )
         current_layout.addWidget(
             self.title_label
+        )
+        current_layout.addWidget(
+            self.points_label
+        )
+        current_layout.addWidget(
+            self.rewards_label
         )
 
         top_layout.addWidget(
@@ -984,6 +1006,142 @@ class MainMenu(QMainWindow):
 
             self.uptime_label.setText(
                 "⏱ —"
+            )
+
+        self.update_current_channel_rewards()
+
+    def update_current_channel_rewards(self):
+
+        if not self.current_channel:
+
+            self.points_label.setText(
+                "✦ — channel points"
+            )
+
+            self.rewards_label.setText(
+                "🎁 — channel rewards"
+            )
+
+            return
+
+        broadcaster_id = None
+
+        if self.current_stream:
+
+            broadcaster_id = self.current_stream.get(
+                "user_id"
+            )
+
+        if not broadcaster_id:
+
+            try:
+
+                user = self.api.get_user(
+                    self.current_channel
+                )
+
+                broadcaster_id = user.get(
+                    "id"
+                )
+
+            except Exception:
+
+                broadcaster_id = None
+
+        if not broadcaster_id:
+
+            self.points_label.setText(
+                "✦ — channel points"
+            )
+
+            self.rewards_label.setText(
+                "🎁 Could not load rewards."
+            )
+
+            return
+
+        try:
+
+            rewards = self.api.get_channel_rewards(
+                broadcaster_id
+            )
+
+            active_rewards = [
+
+                reward
+
+                for reward in rewards
+
+                if reward.get(
+                    "is_enabled",
+                    False
+                )
+            ]
+
+            reward_count = len(
+                active_rewards
+            )
+
+            if reward_count == 0:
+
+                self.points_label.setText(
+                    "✦ 0 active rewards"
+                )
+
+                self.rewards_label.setText(
+                    "🎁 No channel rewards available."
+                )
+
+                return
+
+            self.points_label.setText(
+                f"✦ {reward_count} active reward{'s' if reward_count != 1 else ''}"
+            )
+
+            reward_items = []
+
+            for reward in active_rewards[:4]:
+
+                title = reward.get(
+                    "title",
+                    "Unknown"
+                )
+
+                cost = reward.get(
+                    "cost",
+                    0
+                )
+
+                reward_items.append(
+                    f"{title} ({cost:,})"
+                )
+
+            reward_text = ", ".join(
+                reward_items
+            )
+
+            if reward_count > 4:
+
+                reward_text += (
+                    f" and {reward_count - 4} more"
+                )
+
+            self.rewards_label.setText(
+                f"🎁 {reward_text}"
+            )
+
+        except Exception as error:
+
+            self.points_label.setText(
+                "✦ — channel points"
+            )
+
+            self.rewards_label.setText(
+                "🎁 Could not load rewards."
+            )
+
+            self.log(
+                f"REWARDS ERROR: {error}"
             )
 
     def update_next_stream(self):
