@@ -4,7 +4,7 @@ import traceback
 from PySide6.QtWidgets import QApplication
 
 from api import TwitchAPI
-from mainmenu import MainMenu
+from mainmenuv2 import MainMenu
 from twitch_token_manager import get_valid_token
 
 
