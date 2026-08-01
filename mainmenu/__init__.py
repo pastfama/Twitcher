@@ -6,6 +6,8 @@ from .chat_panel import ChatPanel
 from .dispatcher_panel import DispatcherPanel
 from .log_window import LogWindow
 
+__version__ = "0.3.0"
+
 __all__ = [
     "MainMenu",
     "LogWindow",
