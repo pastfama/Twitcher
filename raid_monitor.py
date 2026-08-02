@@ -53,6 +53,13 @@ class RaidMonitor:
 
         self.lock = threading.Lock()
 
+        # Incremented on every start()/stop() so a stale worker
+        # thread can detect it is no longer the active one.
+        self.generation = 0
+
+        # Exponential backoff state for Twitch HTTP 429 responses.
+        self.backoff_attempts = 0
+
         print(
 
             "[RAID MONITOR] Initialized."
@@ -94,6 +101,9 @@ class RaidMonitor:
 
         )
 
+        # Fully stop the previous worker first so that only one
+        # EventSub subscription is ever created per broadcaster.
+
         self.stop()
 
         with self.lock:
@@ -104,9 +114,17 @@ class RaidMonitor:
 
             self.stop_event.clear()
 
+            self.generation += 1
+
+            generation = self.generation
+
+            self.backoff_attempts = 0
+
         self.thread = threading.Thread(
 
             target=self._thread_worker,
+
+            args=(generation,),
 
             name="RaidMonitor",
 
@@ -143,6 +161,31 @@ class RaidMonitor:
 
             self.stop_event.set()
 
+            # Invalidate any running worker so it exits promptly.
+            self.generation += 1
+
+        thread = self.thread
+
+        if (
+
+            thread is not None
+
+            and thread.is_alive()
+
+            and thread is not threading.current_thread()
+
+        ):
+
+            # Give the worker time to close its WebSocket. Its recv
+            # polls every second, and its sleeps check the generation,
+            # so it should exit well within the timeout.
+
+            thread.join(
+
+                timeout=2.0
+
+            )
+
         if was_running:
 
             self.signals.status.emit(
@@ -153,12 +196,31 @@ class RaidMonitor:
 
 
     # ========================================================
+    # GENERATION STATE
+    # ========================================================
+
+    def _is_current_generation(
+
+        self,
+
+        generation
+
+    ):
+
+        with self.lock:
+
+            return generation == self.generation
+
+
+    # ========================================================
     # THREAD WORKER
     # ========================================================
 
     def _thread_worker(
 
-        self
+        self,
+
+        generation
 
     ):
 
@@ -166,13 +228,27 @@ class RaidMonitor:
 
             asyncio.run(
 
-                self._async_worker()
+                self._async_worker(
+
+                    generation
+
+                )
 
             )
 
         except Exception as error:
 
-            if self.is_running():
+            if (
+
+                self.is_running()
+
+                and self._is_current_generation(
+
+                    generation
+
+                )
+
+            ):
 
                 self.signals.error.emit(
 
@@ -187,11 +263,23 @@ class RaidMonitor:
 
     async def _async_worker(
 
-        self
+        self,
+
+        generation
 
     ):
 
-        while self.is_running():
+        while (
+
+            self.is_running()
+
+            and self._is_current_generation(
+
+                generation
+
+            )
+
+        ):
 
             channel = self.get_current_channel()
 
@@ -203,7 +291,9 @@ class RaidMonitor:
 
                 await self._monitor_channel(
 
-                    channel
+                    channel,
+
+                    generation
 
                 )
 
@@ -213,7 +303,17 @@ class RaidMonitor:
 
             except Exception as error:
 
-                if not self.is_running():
+                if (
+
+                    not self.is_running()
+
+                    or not self._is_current_generation(
+
+                        generation
+
+                    )
+
+                ):
 
                     return
 
@@ -223,17 +323,104 @@ class RaidMonitor:
 
                 )
 
-                self.signals.status.emit(
+                if self._is_rate_limited(
 
-                    "Raid monitor reconnecting in 5 seconds..."
+                    str(error)
 
-                )
+                ):
+
+                    delay = self._next_backoff()
+
+                    self.signals.status.emit(
+
+                        f"Raid monitor rate-limited; retrying in "
+
+                        f"{delay} seconds..."
+
+                    )
+
+                else:
+
+                    delay = 5
+
+                    self._reset_backoff()
+
+                    self.signals.status.emit(
+
+                        "Raid monitor reconnecting in 5 seconds..."
+
+                    )
 
                 await self._sleep_interruptible(
 
-                    5
+                    delay,
+
+                    generation
 
                 )
+
+
+    # ========================================================
+    # RATE LIMIT HANDLING
+    # ========================================================
+
+    def _is_rate_limited(
+
+        self,
+
+        message
+
+    ):
+
+        text = str(message).lower()
+
+        return (
+
+            "429" in text
+
+            or "too many requests" in text
+
+            or "maximum subscriptions" in text
+
+        )
+
+
+    def _next_backoff(
+
+        self
+
+    ):
+
+        with self.lock:
+
+            attempts = self.backoff_attempts
+
+            self.backoff_attempts = min(
+
+                attempts + 1,
+
+                6
+
+            )
+
+        return min(
+
+            5 * (2 ** attempts),
+
+            60
+
+        )
+
+
+    def _reset_backoff(
+
+        self
+
+    ):
+
+        with self.lock:
+
+            self.backoff_attempts = 0
 
 
     # ========================================================
@@ -244,7 +431,9 @@ class RaidMonitor:
 
         self,
 
-        channel
+        channel,
+
+        generation
 
     ):
 
@@ -424,11 +613,23 @@ class RaidMonitor:
 
             )
 
+            self._reset_backoff()
+
             # ------------------------------------------------
             # LISTEN
             # ------------------------------------------------
 
-            while self.is_running():
+            while (
+
+                self.is_running()
+
+                and self._is_current_generation(
+
+                    generation
+
+                )
+
+            ):
 
                 if (
 
@@ -446,7 +647,22 @@ class RaidMonitor:
 
                     return
 
-                raw_message = await websocket.recv()
+                try:
+
+                    raw_message = await asyncio.wait_for(
+
+                        websocket.recv(),
+
+                        timeout=1.0
+
+                    )
+
+                except asyncio.TimeoutError:
+
+                    # Poll so shutdown / generation changes are
+                    # noticed within one second.
+
+                    continue
 
                 message = json.loads(
 
@@ -627,7 +843,9 @@ class RaidMonitor:
 
         self,
 
-        seconds
+        seconds,
+
+        generation
 
     ):
 
@@ -639,7 +857,17 @@ class RaidMonitor:
 
         )
 
-        while self.is_running():
+        while (
+
+            self.is_running()
+
+            and self._is_current_generation(
+
+                generation
+
+            )
+
+        ):
 
             remaining = (
 

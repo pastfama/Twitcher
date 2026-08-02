@@ -5,7 +5,13 @@ import traceback
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QMetaObject, Qt
+from PySide6.QtCore import (
+    QCoreApplication,
+    QMetaObject,
+    Qt,
+    QDir,
+    QLockFile
+)
 from PySide6.QtWidgets import QApplication
 
 from logger import debug, info, warning, error
@@ -479,6 +485,44 @@ def start_twitcher(
 
 
 def main():
+
+    # --------------------------------------------------------
+    # SINGLE INSTANCE GUARD
+    # --------------------------------------------------------
+    #
+    # Prevent two Twitcher processes from running at the same
+    # time. Two instances would each create an EventSub
+    # subscription for the same channel, and Twitch rejects the
+    # second one with HTTP 429 ("maximum subscriptions with type
+    # and condition exceeded"), which also floods the logs.
+
+    lock_file = QLockFile(
+
+        os.path.join(
+
+            QDir.tempPath(),
+
+            "twitcher-control-center.lock"
+
+        )
+
+    )
+
+    if not lock_file.tryLock(100):
+
+        print()
+
+        print(
+
+            "[LOCK] Another Twitcher instance is already running. "
+
+            "This instance will exit."
+
+        )
+
+        print()
+
+        return
 
     print()
 
