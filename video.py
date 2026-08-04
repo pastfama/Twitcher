@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from logger import debug, info, warning, error
 
-from core.channel_history import load_channels, save_channel
+from core.db import get_recent_channels as load_channels, store_channel_played as save_channel
 from core.stream_resolver import resolve_stream_url, StreamResolverError
 
 

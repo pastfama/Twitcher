@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
 )
 
 from core import run_in_background
@@ -35,17 +36,58 @@ class LiveFollowedPanel(QGroupBox):
         self._avatar_cache = {}
         self._pending_avatars = set()
         self._row_by_login = {}
+        self._all_streams = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
 
-        # Make the panel almost same visual size as currwatching
         self.setMinimumHeight(380)
 
+        # --- Search/filter bar ---
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search channels...")
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {Theme.DARK_PANEL};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.SECTION_BORDER};
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-size: 11px;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {Theme.CYAN};
+            }}
+        """)
+        self.search_input.textChanged.connect(self._on_search_changed)
+        layout.addWidget(self.search_input)
+
+        # --- Column headers ---
+        headers_row = QHBoxLayout()
+        headers_row.setContentsMargins(52, 0, 6, 0)
+        headers_row.setSpacing(0)
+
+        for text, width in [
+            ("CHANNEL", None),
+            ("VIEWERS", 60),
+            ("CATEGORY", None),
+            ("GROWTH", 55),
+            ("SCORE", 40),
+        ]:
+            lbl = QLabel(text)
+            lbl.setFont(QFont(Theme.FAMILY, 7, QFont.Weight.Bold))
+            lbl.setStyleSheet(f"color: {Theme.GAME_DIM}; padding: 2px 0;")
+            if width:
+                lbl.setFixedWidth(width)
+            headers_row.addWidget(lbl)
+
+        layout.addLayout(headers_row)
+
+        # --- Channel list ---
         self.channel_list = QListWidget()
-        # Use standard list mode - items will be full width
         self.channel_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        self.channel_list.setSpacing(2)
+        self.channel_list.setSpacing(1)
         self.channel_list.setStyleSheet(f"""
             QListWidget {{
                 background-color: {Theme.DARK_PANEL};
@@ -54,7 +96,7 @@ class LiveFollowedPanel(QGroupBox):
             }}
             QListWidget::item {{
                 border-bottom: 1px solid {Theme.SECTION_BORDER};
-                padding: 4px;
+                padding: 2px;
             }}
             QListWidget::item:selected {{
                 background-color: {Theme.AVATAR_BG};
@@ -73,6 +115,18 @@ class LiveFollowedPanel(QGroupBox):
     def set_analytics_engine(self, analytics):
         self._analytics = analytics
 
+    def _on_search_changed(self, text):
+        text = text.strip().lower()
+        if not text:
+            self._rebuild_list(self._all_streams)
+        else:
+            filtered = [
+                s for s in self._all_streams
+                if text in str(s.get("user_login", "")).lower()
+                or text in str(s.get("user_name", "")).lower()
+            ]
+            self._rebuild_list(filtered)
+
     def _on_item_clicked(self, item):
         stream = item.data(Qt.ItemDataRole.UserRole)
         if stream:
@@ -89,6 +143,10 @@ class LiveFollowedPanel(QGroupBox):
 
     def set_streams(self, streams):
         debug(f"LiveFollowedPanel.set_streams called with {len(streams) if streams else 0} streams")
+        self._all_streams = list(streams or [])
+        self._rebuild_list(self._all_streams)
+
+    def _rebuild_list(self, streams):
         selected_login = None
         current_item = self.channel_list.currentItem()
         if current_item:
@@ -100,7 +158,7 @@ class LiveFollowedPanel(QGroupBox):
         self._row_by_login = {}
         restore_index = -1
 
-        for index, stream in enumerate(streams or []):
+        for index, stream in enumerate(streams):
             self._add_row(stream)
             if selected_login:
                 login = str(stream.get("user_login") or stream.get("user_name") or "").strip().lower()
@@ -118,8 +176,7 @@ class LiveFollowedPanel(QGroupBox):
 
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, stream)
-        # Make each item taller so the list takes more vertical space
-        item.setSizeHint(QSize(0, 80))
+        item.setSizeHint(QSize(0, 52))
         self.channel_list.addItem(item)
 
         row = self._build_row_widget(stream, name, viewers, category, login)
@@ -135,66 +192,79 @@ class LiveFollowedPanel(QGroupBox):
         widget.setStyleSheet("QWidget#FollowedRow { background: transparent; }")
 
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(6, 4, 6, 4)
-        layout.setSpacing(10)
+        layout.setContentsMargins(4, 3, 6, 3)
+        layout.setSpacing(8)
 
+        # --- Avatar ---
         avatar_label = QLabel("?")
-        avatar_label.setFixedSize(46, 46)
+        avatar_label.setFixedSize(38, 38)
         avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        avatar_label.setStyleSheet(f"background-color: {Theme.AVATAR_BG}; border: 1px solid {Theme.SECTION_BORDER}; border-radius: 23px; color: {Theme.DIM};")
+        avatar_label.setStyleSheet(f"""
+            background-color: {Theme.AVATAR_BG};
+            border: 1px solid {Theme.SECTION_BORDER};
+            border-radius: 19px;
+            color: {Theme.DIM};
+            font-size: 11px;
+        """)
         layout.addWidget(avatar_label)
 
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
-
+        # --- Channel name ---
         name_label = QLabel(str(name))
         name_label.setFont(QFont(Theme.FAMILY, 11, QFont.Weight.Bold))
         name_label.setStyleSheet(f"color: {Theme.TEXT_PRIMARY};")
-        text_col.addWidget(name_label)
+        name_label.setFixedWidth(100)
+        layout.addWidget(name_label)
 
-        info_label = QLabel(f"👁 {viewers:,}   🎮 {category}")
-        info_label.setStyleSheet(f"color: {Theme.MUTED};")
-        text_col.addWidget(info_label)
+        # --- Viewers ---
+        viewers_label = QLabel(f"{viewers:,}")
+        viewers_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 11px;")
+        viewers_label.setFixedWidth(60)
+        layout.addWidget(viewers_label)
 
-        analytics_line_parts = []
-        momentum_status = ""
+        # --- Category ---
+        cat_label = QLabel(category)
+        cat_label.setStyleSheet(f"color: {Theme.MUTED}; font-size: 10px;")
+        layout.addWidget(cat_label, 1)
 
+        # --- Growth ---
+        growth_parts = []
         if self._tracker and login:
             stats = self._tracker.get_channel_stats(login)
             if stats:
-                momentum_status = stats.get("status") or ""
                 percent = stats.get("percent") or 0
-                analytics_line_parts.append(f"📊 {momentum_status} {percent:+.1f}%")
+                growth_parts.append(f"{percent:+.1f}%")
 
         sully = {}
         if self._analytics and login:
             sully = self._analytics.sullygoose_for(login, viewers) or {}
-
         if sully:
             growth = sully.get("viewer_growth", 0)
-            analytics_line_parts.append(f"↗ {growth:+.1f}%")
-            rank = sully.get("category_rank", 0)
-            analytics_line_parts.append(f"🏆 #{rank}")
+            if growth is not None:
+                growth_parts.append(f"{growth:+.1f}%")
 
-        analytics_label = QLabel("   ".join(analytics_line_parts) if analytics_line_parts else "📊 Waiting...")
-        analytics_label.setStyleSheet(f"color: {Theme.CYAN};")
-        text_col.addWidget(analytics_label)
+        growth_text = growth_parts[0] if growth_parts else "--"
+        growth_label = QLabel(growth_text)
+        is_positive = growth_text.startswith("+") and growth_text != "+0.0%"
+        is_negative = growth_text.startswith("-")
+        if is_positive:
+            growth_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold;")
+        elif is_negative:
+            growth_label.setStyleSheet(f"color: {Theme.RED_DARK}; font-size: 10px; font-weight: bold;")
+        else:
+            growth_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 10px;")
+        growth_label.setFixedWidth(55)
+        layout.addWidget(growth_label)
 
-        metrics_parts = []
-        if sully:
-            avg = sully.get("avg_viewers", 0)
-            freq = sully.get("stream_frequency", 0)
-            metrics_parts.append(f"Avg {avg:,}")
-            if freq:
-                metrics_parts.append(f"{freq:.0f}h/wk")
-            score = self._analytics.calculate_score({"viewers": viewers, "status": momentum_status, "sullygoose": sully})
-            metrics_parts.append(f"★ {score}")
+        # --- Score ---
+        score_text = "--"
+        if self._analytics and sully:
+            score = self._analytics.calculate_score({"viewers": viewers, "sullygoose": sully})
+            score_text = str(score)
+        score_label = QLabel(score_text)
+        score_label.setStyleSheet(f"color: {Theme.CYAN}; font-size: 10px; font-weight: bold;")
+        score_label.setFixedWidth(40)
+        layout.addWidget(score_label)
 
-        metrics_label = QLabel("  •  ".join(metrics_parts) if metrics_parts else "")
-        metrics_label.setStyleSheet(f"color: {Theme.DIM};")
-        text_col.addWidget(metrics_label)
-
-        layout.addLayout(text_col, 1)
         widget.avatar_label = avatar_label
         widget.login = login
         widget.stream = stream
@@ -207,7 +277,6 @@ class LiveFollowedPanel(QGroupBox):
         if login in self._pending_avatars:
             return
         if not avatar_url and self.api is None:
-            # If we don't have an avatar URL and no API available, we can't fetch it
             return
         self._pending_avatars.add(login)
         run_in_background(
@@ -237,7 +306,7 @@ class LiveFollowedPanel(QGroupBox):
             return
         pixmap = QPixmap()
         if pixmap.loadFromData(data):
-            pixmap = pixmap.scaled(46, 46, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+            pixmap = pixmap.scaled(38, 38, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
             self._avatar_cache[login] = pixmap
             self._apply_avatar(login, pixmap)
 

@@ -48,6 +48,14 @@ class Theme:
     AVATAR_SIZE = 40
     THUMBNAIL_SIZE = 80
 
+    # --- score-bar gradient ---
+    SCORE_GRADIENT = (
+        "x1:0, y1:0, x2:1, y2:0, "
+        "stop:0 #ff3366, "
+        "stop:0.5 #ffaa00, "
+        "stop:1 #00ffff"
+    )
+
     # --- common styles ---
     @staticmethod
     def group_box_style(title_color=None):

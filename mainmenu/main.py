@@ -151,6 +151,16 @@ class MainMenu(
         )
 
         self.viewer_monitor.start(self.time_boss)
+
+        # Register a TimeBoss task to periodically fetch SG data for live channels.
+        self.time_boss.register(
+            "sg_fetch",
+            lambda: self.analytics_engine.fetch_all_live_channels(
+                self.live_channels
+            ),
+            priority=TimeBoss.PRIORITY_ANALYTICS,
+        )
+
         self.time_boss.start()
 
         self.log(
@@ -167,25 +177,31 @@ class MainMenu(
 
 
     def _get_recent_channels_for_video(self):
-        """Return recent channels for TimeBoss video auto-play."""
+        """Return recent channels for TimeBoss video auto-play from DB."""
         try:
-            return load_channels()
+            from core.db import get_recent_channels
+            return get_recent_channels(limit=10)
         except Exception:
             return []
 
     def _load_cached_streamer_data(self):
-        """Populate UI panels with locally-cached streamer metadata."""
+        """Populate UI panels with locally-cached streamer metadata from DB."""
         try:
-            from core.streamer_history import load_streamer_data
-            data = load_streamer_data()
-            if not data:
+            from core.db import list_streamers, get_streamer
+            all_streamers = list_streamers()
+            if not all_streamers:
                 return
-            # Pre-fill avatar cache so enrich_stream_with_avatar is instant.
-            for login, entry in data.items():
-                avatar = entry.get("avatar_url")
+            count = 0
+            for entry in all_streamers:
+                login = entry.get("login")
+                if not login:
+                    continue
+                full = get_streamer(login)
+                avatar = full.get("avatar_url")
                 if avatar:
                     self.avatar_cache[login] = avatar
-            self.log(f"Loaded cached data for {len(data)} streamers")
+                count += 1
+            self.log(f"Loaded cached data for {count} streamers from DB")
         except Exception as exc:
             self.log(f"Could not load cached streamer data: {exc}")
 

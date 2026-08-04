@@ -1,4 +1,5 @@
 from PySide6.QtWidgets import QMessageBox
+from .theme import Theme
 
 
 class MainMenuStreamState:
@@ -32,13 +33,15 @@ class MainMenuStreamState:
 
         self.user = user or {}
 
-        self.connection_label.setText(
-            "● CONNECTED"
-        )
+        self.connection_label.setText("CONNECTED")
 
-        self.connection_label.setStyleSheet(
-            "color: #72d6a0;"
-        )
+        self.connection_label.setStyleSheet(f"""
+            color: #72d6a0;
+            background-color: {Theme.DARK_PANEL};
+            border: 1px solid #72d6a0;
+            border-radius: 4px;
+            padding: 4px 10px;
+        """)
 
         self.log(
             f"Logged in as {self.user.get('display_name', 'unknown')}"
@@ -61,13 +64,15 @@ class MainMenuStreamState:
         if self.is_closing:
             return
 
-        self.connection_label.setText(
-            "● ERROR"
-        )
+        self.connection_label.setText("ERROR")
 
-        self.connection_label.setStyleSheet(
-            "color: #ff7777;"
-        )
+        self.connection_label.setStyleSheet(f"""
+            color: {Theme.RED_DARK};
+            background-color: {Theme.DARK_PANEL};
+            border: 1px solid {Theme.RED_DARK};
+            border-radius: 4px;
+            padding: 4px 10px;
+        """)
 
         self.dispatcher_panel.set_status(
             "Twitch connection error"

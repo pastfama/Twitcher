@@ -34,7 +34,7 @@ class TimeBoss(QObject):
     ticked = Signal(int)
 
     DEFAULT_TICK_MS = 1000
-    DEFAULT_REFRESH_S = 7
+    DEFAULT_REFRESH_S = 4
 
     # Slot execution order — lower number = higher priority.
     PRIORITY_VIDEO = 0

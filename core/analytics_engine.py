@@ -14,6 +14,7 @@ import threading
 import time
 
 from logger import debug
+from core.db import get_sg, store_sg, list_sg_channels
 
 
 class AnalyticsEngine:
@@ -60,11 +61,22 @@ class AnalyticsEngine:
         self._fetch_failure_cooldown = fetch_failure_cooldown
         self._failed_fetches = {}  # login -> last failure timestamp
 
+        # Pre-load cached SG data from local JSON file.
+        self._load_cached_data()
 
 
-    # ========================================================
-    # MAIN UPDATE
-    # ========================================================
+
+    def _load_cached_data(self):
+        """Load cached SullyGoose data from the database into memory."""
+        with self._cache_lock:
+            cached_channels = list_sg_channels()
+            for entry in cached_channels:
+                login = entry.get("login")
+                if login:
+                    data = get_sg(login)
+                    if data:
+                        self._sully_cache[login] = data
+            debug(f"[ANALYTICS] Loaded {len(cached_channels)} channels from DB")
 
     def update_stream(
         self,
@@ -239,6 +251,8 @@ class AnalyticsEngine:
                 if stats:
                     with self._cache_lock:
                         self._sully_cache[login] = stats
+                    # Save to database for next startup.
+                    store_sg(login, stats)
                 else:
                     # Failed or empty — record failure timestamp for cooldown.
                     with self._cache_lock:
@@ -257,6 +271,24 @@ class AnalyticsEngine:
             daemon=True,
         )
         thread.start()
+
+    def fetch_all_live_channels(self, channels):
+        """Fetch SullyGoose data for all live channels (called by TimeBoss).
+
+        This method does NOT block — it checks the cache first and
+        starts background fetches for any uncached channels.
+        """
+        if not channels:
+            return
+
+        for stream in channels:
+            login = (
+                stream.get("user_login")
+                or stream.get("user_name")
+                or ""
+            ).lower()
+            if login:
+                self._ensure_async_fetch(login)
 
     # ========================================================
     # STREAM QUALITY SCORE

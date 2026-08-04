@@ -1,10 +1,8 @@
 """Viewer history sparkline widget — mini graph showing recent viewer counts.
 
 A reusable QWidget that displays a sparkline of the last ~30 viewer-count
-samples with a filled gradient area and grid lines.
+samples with a filled gradient area and subtle grid lines.
 """
-
-import math
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import (
@@ -18,11 +16,19 @@ class ViewerHistoryGraph(QWidget):
 
     MAX_POINTS = 30
 
+    # --- theme colors ---
+    _BG = "#0a0d18"
+    _BORDER = "#3a3a5a"
+    _LINE = "#00ffff"
+    _FILL_TOP = "#00ffff"
+    _GRID = "#1a2a4b"
+    _TEXT = "#6a7188"
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.points: list[int] = []
-        self.setMinimumHeight(30)
-        self.setMaximumHeight(50)
+        self.setMinimumHeight(40)
+        self.setMaximumHeight(70)
 
     def add_point(self, value: int):
         """Add a new viewer-count sample and trigger repaint."""
@@ -32,50 +38,84 @@ class ViewerHistoryGraph(QWidget):
         self.update()
 
     def paintEvent(self, event):
-        if not self.points:
-            return
-
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
             w = self.width()
             h = self.height()
+
+            # --- background + border ---
+            painter.fillRect(0, 0, w, h, QColor(self._BG))
+            border_pen = QPen(QColor(self._BORDER))
+            border_pen.setWidthF(1)
+            painter.setPen(border_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(0, 0, w - 1, h - 1)
+
+            if not self.points:
+                painter.setPen(QColor(self._TEXT))
+                painter.setFont(QFont("Segoe UI", 8))
+                painter.drawText(
+                    QRectF(0, 0, w, h),
+                    Qt.AlignmentFlag.AlignCenter,
+                    "No data",
+                )
+                return
+
+            # Inner padding
+            pad = 4
+            gw = w - pad * 2
+            gh = h - pad * 2
+
             max_val = max(self.points) or 1
 
-            # --- Y-axis labels and grid lines ---
-            label_height = 15
-            for i in range(5):
-                y = h - (i * h / 4)
-                value = int(max_val * (i / 4))
-                painter.drawText(0, y, f"{value}")
-                painter.drawLine(0, y, w, y)
+            # --- Y-axis grid lines (4 lines) ---
+            grid_pen = QPen(QColor(self._GRID))
+            grid_pen.setWidthF(0.5)
+            grid_pen.setStyle(Qt.PenStyle.DashLine)
+            painter.setPen(grid_pen)
+
+            text_pen = QPen(QColor(self._TEXT))
+            painter.setFont(QFont("Segoe UI", 7))
+            for i in range(1, 4):
+                y = pad + gh - (i * gh / 4)
+                painter.drawLine(int(pad), int(y), int(pad + gw), int(y))
 
             # --- filled area ---
             path = QPainterPath()
-            path.moveTo(0, h)
+            path.moveTo(pad, pad + gh)
+            n = len(self.points)
             for i, v in enumerate(self.points):
-                x = i * w / max(len(self.points) - 1, 1)
-                y = h - (v / max_val) * h
+                x = pad + (i * gw / max(n - 1, 1))
+                y = pad + gh - (v / max_val) * gh
                 path.lineTo(x, y)
-            path.lineTo(w, h)
+            path.lineTo(pad + gw, pad + gh)
             path.closeSubpath()
 
-            gradient = QLinearGradient(0, 0, 0, h)
-            gradient.setColorAt(0, QColor(0, 255, 255, 60))
-            gradient.setColorAt(1, QColor(0, 255, 255, 0))
+            gradient = QLinearGradient(0, pad, 0, pad + gh)
+            gradient.setColorAt(0, QColor(self._FILL_TOP, 50))
+            gradient.setColorAt(1, QColor(self._FILL_TOP, 0))
             painter.fillPath(path, gradient)
 
             # --- line ---
-            pen = QPen(QColor(0, 255, 255))
+            pen = QPen(QColor(self._LINE))
             pen.setWidthF(1.5)
             painter.setPen(pen)
 
-            for i in range(len(self.points) - 1):
-                x1 = i * w / max(len(self.points) - 1, 1)
-                y1 = h - (self.points[i] / max_val) * h
-                x2 = (i + 1) * w / max(len(self.points) - 1, 1)
-                y2 = h - (self.points[i + 1] / max_val) * h
+            for i in range(n - 1):
+                x1 = pad + (i * gw / max(n - 1, 1))
+                y1 = pad + gh - (self.points[i] / max_val) * gh
+                x2 = pad + ((i + 1) * gw / max(n - 1, 1))
+                y2 = pad + gh - (self.points[i + 1] / max_val) * gh
                 painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+
+            # --- latest value dot ---
+            if n > 0:
+                lx = pad + ((n - 1) * gw / max(n - 1, 1))
+                ly = pad + gh - (self.points[-1] / max_val) * gh
+                painter.setBrush(QColor(self._LINE))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QRectF(lx - 3, ly - 3, 6, 6))
         finally:
             painter.end()

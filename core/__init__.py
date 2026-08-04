@@ -4,7 +4,14 @@ All blocking Twitch/Twitch-Auth work happens off the GUI thread here.
 The mainmenu layer only wires signals and UI.
 """
 
-from .channel_history import clear_channels, load_channels, save_channel
+from .db import (
+    get_recent_channels as load_channels,
+    store_channel_played as save_channel,
+    clear_channel_history as clear_channels,
+    get_streamer,
+    store_streamer as update_streamer,
+    store_viewer_history as record_viewer_count,
+)
 from .dispatcher import StreamDispatcher, DispatcherSignals
 from .raid_monitor import RaidMonitor, RaidSignals
 from .stream_resolver import (
@@ -12,12 +19,6 @@ from .stream_resolver import (
     normalize_channel as normalize_stream_channel,
     resolve_stream_url,
     try_resolve as try_resolve_streams,
-)
-from .streamer_history import (
-    get_streamer,
-    load_streamer_data,
-    record_viewer_count,
-    update_streamer,
 )
 from .analytics_engine import AnalyticsEngine
 from .time_boss import TimeBoss
@@ -45,7 +46,6 @@ __all__ = [
     "try_resolve_streams",
     "TimeBoss",
     "AnalyticsEngine",
-    "load_streamer_data",
     "update_streamer",
     "get_streamer",
     "record_viewer_count",

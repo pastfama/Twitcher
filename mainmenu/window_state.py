@@ -5,7 +5,7 @@ from datetime import datetime
 
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget, QMessageBox
+from PySide6.QtWidgets import QApplication, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget, QMessageBox
 
 from logger import LOG_FILE
 from twitch_token_manager import get_valid_token
@@ -22,21 +22,32 @@ class MainMenuWindowState:
         main_layout.setSpacing(10)
         self.setStyleSheet(MAIN_WINDOW_STYLESHEET)
 
+        from .theme import Theme
+
         header_layout = QHBoxLayout()
+        header_layout.setSpacing(12)
+
         header = QLabel("TWITCHER")
-        header.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
-        header.setStyleSheet("color: #aab4ff;")
+        header.setFont(QFont(Theme.FAMILY, 24, QFont.Weight.Bold))
+        header.setStyleSheet(f"color: {Theme.CYAN}; letter-spacing: 3px;")
         header_layout.addWidget(header)
 
-        subtitle = QLabel("AUTOMATED STREAM CONTROL CENTER")
-        subtitle.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        subtitle.setStyleSheet("color: #727991;")
+        subtitle = QLabel("CONTROL CENTER")
+        subtitle.setFont(QFont(Theme.FAMILY, 9, QFont.Weight.Bold))
+        subtitle.setStyleSheet(f"color: {Theme.GAME_DIM}; letter-spacing: 1px; padding-top: 4px;")
         header_layout.addWidget(subtitle)
+
         header_layout.addStretch()
 
-        self.connection_label = QLabel("● OFFLINE")
-        self.connection_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        self.connection_label.setStyleSheet("color: #ff7777;")
+        self.connection_label = QLabel("OFFLINE")
+        self.connection_label.setFont(QFont(Theme.FAMILY, 10, QFont.Weight.Bold))
+        self.connection_label.setStyleSheet(f"""
+            color: {Theme.RED_DARK};
+            background-color: {Theme.DARK_PANEL};
+            border: 1px solid {Theme.RED_DARK};
+            border-radius: 4px;
+            padding: 4px 10px;
+        """)
         header_layout.addWidget(self.connection_label)
 
         self.logs_button = QPushButton("LOGS")
@@ -49,16 +60,9 @@ class MainMenuWindowState:
 
         main_layout.addLayout(header_layout)
 
-        stream_cards = QHBoxLayout()
-        stream_cards.setSpacing(10)
+        # --- Create all panels ---
         self.current_panel = self.current_panel_cls()
         self.next_panel = self.next_panel_cls()
-        stream_cards.addWidget(self.current_panel, 1)
-        stream_cards.addWidget(self.next_panel, 1)
-        main_layout.addLayout(stream_cards)
-
-        middle_layout = QHBoxLayout()
-        middle_layout.setSpacing(10)
         self.live_followed_panel = self.live_followed_panel_cls()
         # Wire the new LiveFollowedPanel signals.
         self.live_followed_panel.channel_selected.connect(self.channel_selected)
@@ -69,10 +73,29 @@ class MainMenuWindowState:
         self.live_followed_panel.set_analytics_engine(self.analytics_engine)
         self.chat_panel = self.chat_panel_cls(access_token=get_valid_token() or "")
         self.dispatcher_panel = self.dispatcher_panel_cls()
-        middle_layout.addWidget(self.live_followed_panel, 1)
-        middle_layout.addWidget(self.chat_panel, 3)
-        middle_layout.addWidget(self.dispatcher_panel, 1)
-        main_layout.addLayout(middle_layout, 1)
+
+        # --- 3-column grid: chat is full-height center column ---
+        # Layout per user sketch (red=chat center, green=4 equal side panels):
+        #   ┌──────────────┬────────────────┬──────────────┐
+        #   │ CURRENTLY    │                │  NEXT STREAM │
+        #   │ WATCHING     │     CHAT       │              │
+        #   ├──────────────┤  (full height) ├──────────────┤
+        #   │ LIVE FOLLOWED│                │  DISPATCHER  │
+        #   └──────────────┴────────────────┴──────────────┘
+        #        30%              40%              30%
+        grid = QGridLayout()
+        grid.setSpacing(10)
+        grid.addWidget(self.current_panel,       0, 0)        # top-left
+        grid.addWidget(self.chat_panel,          0, 1, 2, 1)  # center, spans 2 rows
+        grid.addWidget(self.next_panel,          0, 2)        # top-right
+        grid.addWidget(self.live_followed_panel, 1, 0)        # bottom-left
+        grid.addWidget(self.dispatcher_panel,    1, 2)        # bottom-right
+        grid.setColumnStretch(0, 3)   # left  30%
+        grid.setColumnStretch(1, 4)   # chat  40%
+        grid.setColumnStretch(2, 3)   # right 30%
+        grid.setRowStretch(0, 1)      # top    50%
+        grid.setRowStretch(1, 1)      # bottom 50%
+        main_layout.addLayout(grid, 1)
 
     def log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -100,20 +123,24 @@ class MainMenuWindowState:
             QMessageBox.critical(self, "Re-authenticate Failed", str(exc))
 
     def restore_window_geometry(self):
-        geometry = self.settings.value("main_window_geometry")
-        if geometry:
-            try:
-                if self.restoreGeometry(geometry):
+        try:
+            from core.db import get_setting
+            geometry = get_setting("main_window_geometry")
+            if geometry:
+                from PySide6.QtCore import QByteArray
+                ga = QByteArray.fromBase64(geometry.encode("ascii"))
+                if self.restoreGeometry(ga):
                     self.log("Control Center geometry restored.")
                     return
-            except Exception as exc:
-                self.log(f"Could not restore geometry: {exc}")
+        except Exception as exc:
+            self.log(f"Could not restore geometry: {exc}")
         self.log("No saved Control Center geometry.")
 
     def save_window_geometry(self):
         try:
-            self.settings.setValue("main_window_geometry", self.saveGeometry())
-            self.settings.sync()
+            from core.db import set_setting
+            b64 = self.saveGeometry().toBase64().data().decode("ascii")
+            set_setting("main_window_geometry", b64)
         except Exception as exc:
             print(f"[SETTINGS] Could not save geometry: {exc}")
 
@@ -123,19 +150,26 @@ class MainMenuWindowState:
         channel = str(channel).strip().lower()
         if not channel:
             return
-        self.settings.setValue("last_streamer", channel)
-        self.settings.sync()
+        from core.db import set_setting
+        set_setting("last_streamer", channel)
         self.log(f"Saved last streamer: #{channel}")
 
     def load_last_streamer(self):
-        channel = self.settings.value("last_streamer", "")
-        if not channel:
+        try:
+            from core.db import get_setting
+            channel = get_setting("last_streamer", "")
+            if not channel:
+                return None
+            return str(channel).strip().lower()
+        except Exception:
             return None
-        return str(channel).strip().lower()
 
     def clear_last_streamer(self):
-        self.settings.remove("last_streamer")
-        self.settings.sync()
+        try:
+            from core.db import delete_setting
+            delete_setting("last_streamer")
+        except Exception:
+            pass
 
     def move_to_secondary_monitor(self):
         screens = QApplication.screens()

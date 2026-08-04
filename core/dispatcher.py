@@ -7,7 +7,7 @@ from PySide6.QtCore import QObject, Signal
 
 from logger import debug
 
-from core.channel_history import save_channel
+from core.db import store_channel_played as save_channel
 
 
 # ============================================================
