@@ -18,3 +18,8 @@ transcript.txt
 transcript_debug.txt
 transcript_live.jsonl
 models/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec.bak

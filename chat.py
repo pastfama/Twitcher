@@ -83,9 +83,9 @@ def load_twitch_token():
 
         if not token:
 
-            print()
+            debug("")
 
-            print(
+            debug(
 
                 "[CHAT] No valid Twitch access token available."
 
@@ -103,15 +103,15 @@ def load_twitch_token():
 
     except Exception as error:
 
-        print()
+        debug("")
 
-        print(
+        debug(
 
             "[CHAT] Failed to obtain valid Twitch token:"
 
         )
 
-        print(
+        debug(
 
             error
 
@@ -310,7 +310,7 @@ def get_token_identity(
 
 ):
 
-        print(
+        debug(
 
             error
 
@@ -415,36 +415,36 @@ def get_token_identity(
         )
 
 
-    print()
+    debug("")
 
-    print(
+    debug(
 
         "[CHAT] Twitch token identity:"
 
     )
 
-    print(
+    debug(
 
         f"        Username: {login}"
 
     )
 
-    print(
+    debug(
 
         f"        User ID:  {user_id}"
 
     )
 
 
-    print()
+    debug("")
 
-    print(
+    debug(
 
         "[CHAT] Twitch token scopes:"
 
     )
 
-    print(
+    debug(
 
         f"        {data.get('scopes', [])}"
 
@@ -941,7 +941,7 @@ class TwitchChatClient(
 
     ):
 
-        print(
+        debug(
 
             f"[IRC] {line}"
 
@@ -1360,7 +1360,7 @@ class TwitchChatClient(
 
         except Exception as error:
 
-            print(
+            debug(
 
                 "[CHAT PARSE ERROR]",
 
@@ -2516,15 +2516,15 @@ class ChatWidget(
         )
 
 
-        print()
+        debug("")
 
-        print(
+        debug(
 
             "[IRC AUTH FAILURE]"
 
         )
 
-        print(
+        debug(
 
             message
 

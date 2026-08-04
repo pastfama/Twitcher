@@ -1,0 +1,20 @@
+"""IRC client module — irc3-based Twitch IRC with Qt signal bridge.
+
+Provides :class:`IRCClient`, a QObject that wraps the ``irc3`` library
+and emits Qt signals for incoming messages, connection state changes,
+and errors.  The irc3 async loop runs on the shared asyncio bridge
+thread (see :mod:`core.async_bridge`).
+
+Usage::
+
+    from core.irc import IRCClient
+
+    client = IRCClient()
+    client.connected.connect(on_connect)
+    client.message_received.connect(on_message)
+    client.connect("oauth_token", "djdive", "c0lwi")
+"""
+
+from .client import IRCClient
+
+__all__ = ["IRCClient"]
