@@ -1,3 +1,8 @@
-from .client import IRCClient
+try:
+    from .client import IRCClient
+    _HAS_IRC3 = True
+except ImportError:
+    IRCClient = None
+    _HAS_IRC3 = False
 
-__all__ = [chr(34)+chr(73)+chr(82)+chr(67)+chr(67)+chr(108)+chr(105)+chr(101)+chr(110)+chr(116)+chr(34)]
+__all__ = ["IRCClient"]
