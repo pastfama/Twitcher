@@ -4,6 +4,8 @@ from logger import debug
 from PySide6.QtWidgets import QGroupBox, QVBoxLayout
 from chat import ChatWidget
 from ..theme import Theme
+from .transliteration import transliterate_to_russian
+from .token_helpers import normalize_token, get_token_identity
 
 
 class ChatPanel(QGroupBox):
