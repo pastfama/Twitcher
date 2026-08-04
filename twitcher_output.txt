@@ -1,0 +1,106 @@
+
+============================================================
+                 TWITCHER CONTROL CENTER
+============================================================
+
+
+============================================================
+[DISPLAY] DETECTED MONITORS
+============================================================
+
+[DISPLAY] Monitor count: 2
+
+
+[DISPLAY] Monitor 1
+          Name: Q270B16
+
+          Resolution: 1920x1032
+
+          Position: (0, 0)
+
+          Primary: True
+
+[DISPLAY] Monitor 2
+          Name: \\.\DISPLAY1
+
+          Resolution: 1536x816
+
+          Position: (1920, 0)
+
+          Primary: False
+
+============================================================
+
+[VIDEO] Creating standalone VideoWindow (auth-free)...
+
+[VIDEO] Video Window shown (auth-independent)
+
+[TWITCH] Validating Twitch authentication...
+
+[TWITCH AUTH] Token validation:
+HTTP 200
+
+[TWITCH AUTH] Token belongs to:
+          djdive
+
+[TWITCH AUTH] Token scopes:
+          ['bits:read', 'channel:manage:redemptions', 'channel:read:redemptions', 'channel:read:subscriptions', 'chat:edit', 'chat:read', 'moderation:read', 'user:read:email', 'user:read:follows']
+
+[TWITCH AUTH] Existing token is valid.
+
+[TWITCH] Twitch authentication is ready.
+
+
+[TWITCH] Initializing Twitch API...
+
+[WINDOW] Creating MainMenu...
+
+[TWITCH AUTH] Token validation:
+HTTP 200
+
+[TWITCH AUTH] Token belongs to:
+          djdive
+
+[TWITCH AUTH] Token scopes:
+          ['bits:read', 'channel:manage:redemptions', 'channel:read:redemptions', 'channel:read:subscriptions', 'chat:edit', 'chat:read', 'moderation:read', 'user:read:email', 'user:read:follows']
+
+[TWITCH AUTH] Existing token is valid.
+[TIMEBOSS] Timer started with interval: 1000 ms
+
+[WINDOW] Moving Control Center to secondary monitor...
+
+[WINDOW] Restoring Video Window...
+
+[WINDOW] Video Window shown
+
+[WINDOW] Twitcher initialized.
+
+[WINDOW] Control Center: RESTORED POSITION
+[WINDOW] Video Player: RESTORED POSITION
+
+
+[TWITCH] Logged in as DJdive
+[TIMEBOSS] Tick #0: Running cycle at 152453.522
+[TIMEBOSS] Running 6 slots
+[TIMEBOSS] Running 'video_player'
+[TIMEBOSS] Running 'raid_monitor'
+[TIMEBOSS] Running 'momsg_refresh'
+[TIMEBOSS] Running 'live_channels_refresh'
+[TIMEBOSS] Running 'viewer_monitor'
+[TIMEBOSS] Running 'sg_fetch'
+[LIVE CHANNELS] Refreshing (empty list)
+[CHANNEL STATE] _fetch_live_channels: live_channels=0, current_stream=None, returning=0
+[CHANNEL STATE] _fetch_live_channels: live_channels=0, current_stream=None, returning=0
+[VIEWER MONITOR] Got 0 channels from get_live_channels()
+[VIEWER MONITOR] No live channels
+
+[TWITCH AUTH] Token validation:
+HTTP 200
+
+[TWITCH AUTH] Token belongs to:
+          djdive
+
+[TWITCH AUTH] Token scopes:
+          ['bits:read', 'channel:manage:redemptions', 'channel:read:redemptions', 'channel:read:subscriptions', 'chat:edit', 'chat:read', 'moderation:read', 'user:read:email', 'user:read:follows']
+
+[TWITCH AUTH] Existing token is valid.
