@@ -1,5 +1,7 @@
 from PySide6.QtWidgets import QMessageBox
 
+from core import run_in_background
+
 
 class MainMenuRuntime:
     def load_twitch(self):
@@ -27,6 +29,4 @@ class MainMenuRuntime:
         QMessageBox.critical(self, "Twitch Error", message)
 
     def _run_background(self, func, on_success, on_error):
-        from .workers import run_in_background
-
         run_in_background(func, on_success, on_error)

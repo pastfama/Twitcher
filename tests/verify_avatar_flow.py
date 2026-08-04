@@ -2,7 +2,7 @@ import io
 import requests
 from PIL import Image
 
-from mainmenu.current_watching import CurrentWatchingPanel
+from mainmenu.currwatching import CurrentWatchingPanel
 from mainmenu.main import MainMenu
 
 

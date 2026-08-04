@@ -20,6 +20,7 @@ from api import TwitchAPI
 from mainmenu import MainMenu
 from twitch_auth import authenticate
 from twitch_token_manager import get_valid_token
+from video import VideoWindow
 
 
 # ============================================================
@@ -289,10 +290,40 @@ def start_twitcher(
 ):
 
     # --------------------------------------------------------
+    # AUTH-INDEPENDENT VIDEO WINDOW
+    # --------------------------------------------------------
+    #
+    # The video window does NOT need any Twitch auth. Create it
+    # first so playback of the last played channels can start
+    # immediately, then authenticate for the API features in
+    # the background.
+
+    print()
+
+    print(
+
+        "[VIDEO] Creating standalone VideoWindow (auth-free)..."
+
+    )
+
+    video_window = VideoWindow()
+
+    video_window.play_last_channels()
+
+    print()
+
+    print(
+
+        "[VIDEO] Video Window shown (auth-independent)"
+
+    )
+
+
+    # --------------------------------------------------------
     # TWITCH AUTHENTICATION
     # --------------------------------------------------------
 
-    initialize_twitch_authentication()
+    access_token = initialize_twitch_authentication()
 
 
     # --------------------------------------------------------
@@ -307,7 +338,7 @@ def start_twitcher(
 
     )
 
-    api = TwitchAPI()
+    api = TwitchAPI(access_token=access_token)
 
 
     # --------------------------------------------------------
@@ -324,7 +355,9 @@ def start_twitcher(
 
     window = MainMenu(
 
-        api
+        api,
+
+        video_window=video_window
 
     )
 
@@ -484,7 +517,23 @@ def start_twitcher(
 # ============================================================
 
 
+def enable_verbose_logging():
+    """Enable DEBUG-level logging when TWITCHER_DEBUG=1 is set."""
+    if os.environ.get("TWITCHER_DEBUG") == "1":
+        import logging
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        )
+        print("[DEBUG] Verbose logging enabled (TWITCHER_DEBUG=1)")
+
+
 def main():
+
+    # --------------------------------------------------------
+    # VERBOSE DEBUGGING (from start_twitcher_watch.bat)
+    # --------------------------------------------------------
+    enable_verbose_logging()
 
     # --------------------------------------------------------
     # SINGLE INSTANCE GUARD

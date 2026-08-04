@@ -3,6 +3,15 @@ from PySide6.QtWidgets import QMessageBox
 
 class MainMenuStreamState:
 
+    def _fetch_live_channels(self):
+        """Return current live channels list.
+
+        Called by ViewerMonitor to get the list of
+        channels to check. Returns self.live_channels
+        which is populated asynchronously by load_twitch.
+        """
+        return self.live_channels or []
+
     def load_twitch(self):
 
         self.dispatcher_panel.set_status(
@@ -148,6 +157,27 @@ class MainMenuStreamState:
         self.live_followed_panel.set_streams(
             streams
         )
+
+
+        # If nothing is currently playing, auto-start the top live channel.
+        # This ensures the video window actually plays the stream the UI
+        # is displaying, instead of staying blank until the user clicks.
+        if not self.current_channel and streams:
+
+            top = streams[0]
+
+            channel = top.get(
+                "user_login"
+            )
+
+            if channel:
+
+                self.current_stream = top
+
+                self.start_channel(
+                    channel,
+                    manual=False
+                )
 
 
         self.update_next_stream()
@@ -404,6 +434,23 @@ class MainMenuStreamState:
         )
 
 
+        # If nothing is currently playing, auto-start this channel.
+        # This makes the video window actually show the stream that the
+        # currwatching panel is displaying, instead of staying blank.
+        if not self.current_channel:
+
+            channel = stream.get(
+                "user_login"
+            )
+
+            if channel:
+
+                self.start_channel(
+                    channel,
+                    manual=False
+                )
+
+
 
     def connect_chat(self, channel):
 
@@ -546,7 +593,7 @@ class MainMenuStreamState:
 
 
         self.raid_monitor.start(
-            channel
+            self.time_boss
         )
 
 
@@ -594,7 +641,9 @@ class MainMenuStreamState:
     def stop_video(self):
 
         try:
-            self.raid_monitor.stop()
+            self.raid_monitor.stop(
+                self.time_boss
+            )
 
         except Exception:
             pass

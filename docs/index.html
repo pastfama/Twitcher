@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitcher — Automated Twitch Stream Control Center</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #08090f; color: #f2f2f5; min-height: 100vh; }
+        .container { max-width: 900px; margin: 0 auto; padding: 60px 20px; }
+        h1 { font-size: 3em; color: #aab4ff; margin-bottom: 10px; }
+        .tagline { font-size: 1.3em; color: #727991; margin-bottom: 40px; }
+        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 40px 0; }
+        .feature { background: #10121c; border: 1px solid #292d42; border-radius: 12px; padding: 20px; }
+        .feature h3 { color: #78d6c5; margin-bottom: 8px; }
+        .feature p { color: #a0a8c0; font-size: 0.95em; }
+        .download { display: inline-block; background: #191c2c; color: #fff; border: 1px solid #5964a0; border-radius: 8px; padding: 14px 32px; font-size: 1.2em; font-weight: bold; text-decoration: none; margin: 20px 0; transition: all 0.2s; }
+        .download:hover { background: #272c48; border-color: #78d6c5; }
+        .note { color: #6a7188; font-size: 0.9em; margin-top: 10px; }
+        .footer { margin-top: 60px; color: #4a5a7a; font-size: 0.85em; border-top: 1px solid #1e2232; padding-top: 20px; }
+        .emoji { font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Twitcher</h1>
+        <p class="tagline">Automated Twitch Stream Control Center</p>
+
+        <a class="download" href="https://github.com/pastfama/Twitcher/releases/latest">📥 Download Twitcher.exe</a>
+        <p class="note">Requires VLC media player installed. No Python needed.</p>
+
+        <div class="features">
+            <div class="feature">
+                <h3>▶ Auto-Play</h3>
+                <p>Starts playing your last-watched stream the moment you launch the app — no login required.</p>
+            </div>
+            <div class="feature">
+                <h3>🔗 Raid Chain Following</h3>
+                <p>Automatically follows raids to the next channel via Twitch EventSub.</p>
+            </div>
+            <div class="feature">
+                <h3>📊 Real-time Analytics</h3>
+                <p>Viewer momentum tracking, SullyGnome analytics, and stream quality scoring.</p>
+            </div>
+            <div class="feature">
+                <h3>💬 Built-in Chat</h3>
+                <p>Twitch IRC chat with Latin→Cyrillic transliteration for Russian users.</p>
+            </div>
+            <div class="feature">
+                <h3>⏭ Next Stream Prediction</h3>
+                <p>Suggests the best channel to switch to if the current stream ends.</p>
+            </div>
+            <div class="feature">
+                <h3>📺 Live Followed Channels</h3>
+                <p>Shows all your followed channels that are currently live with viewer counts.</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><a href="https://github.com/pastfama/Twitcher" style="color:#78d6c5;">View on GitHub</a> · MIT License · Built with PySide6 + Streamlink</p>
+        </div>
+    </div>
+</body>
+</html>

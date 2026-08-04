@@ -5,6 +5,10 @@ import time
 
 from PySide6.QtCore import QObject, Signal
 
+from logger import debug
+
+from core.channel_history import save_channel
+
 
 # ============================================================
 #                    STREAM DISPATCHER
@@ -310,6 +314,13 @@ class StreamDispatcher:
                 url
 
             )
+
+            # ------------------------------------------------
+            # RECORD HISTORY (auth-independent)
+            # ------------------------------------------------
+
+            save_channel(streamer)
+            debug(f"[DISPATCHER] Recorded channel '{streamer}' in history")
 
             # ------------------------------------------------
             # UPDATE STATE
