@@ -70,29 +70,41 @@ PORT = 3000
 # ============================================================
 
 
-SCOPES = [
+# Scopes documented in twitch_api/config.yaml
+# NEVER request: moderation:manage, channel:manage:broadcast,
+#   user:edit, user:edit:follows
 
-    "user:read:follows",
-
-    "user:read:email",
-
-    "chat:read",
-
-    "chat:edit",
-
-    "channel:read:subscriptions",
-
-    "channel:read:redemptions",
-
-    "channel:manage:redemptions",
-
-    "moderation:read",
-
-    "moderation:manage",
-
-    "bits:read",
-
-]
+# Safety check: filter out any forbidden scopes at import time
+try:
+    from twitch_api.config_loader import get_never_request_scopes
+    _forbidden = get_never_request_scopes()
+    SCOPES = [
+        scope for scope in [
+            "user:read:follows",
+            "user:read:email",
+            "chat:read",
+            "chat:edit",
+            "channel:read:subscriptions",
+            "channel:read:redemptions",
+            "channel:manage:redemptions",
+            "moderation:read",
+            "bits:read",
+        ]
+        if scope not in _forbidden
+    ]
+except Exception:
+    # Fallback if config_loader is unavailable
+    SCOPES = [
+        "user:read:follows",
+        "user:read:email",
+        "chat:read",
+        "chat:edit",
+        "channel:read:subscriptions",
+        "channel:read:redemptions",
+        "channel:manage:redemptions",
+        "moderation:read",
+        "bits:read",
+    ]
 
 
 # ============================================================

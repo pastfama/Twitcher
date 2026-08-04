@@ -4,14 +4,15 @@ from .chat import ChatMixin
 from .clips import ClipsMixin
 from .client import TwitchAPIBase, TwitchAPIError
 from .eventsub import EventSubMixin
+from .games import GamesMixin
 from .rewards import RewardsMixin
 from .streams import StreamsMixin
 from .users import UsersMixin
 
 
 class TwitchAPI(TwitchAPIBase):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, access_token=None):
+        super().__init__(access_token=access_token)
 
     get_app_access_token = AuthMixin.get_app_access_token
     get_user_access_token = AuthMixin.get_user_access_token
@@ -27,6 +28,8 @@ class TwitchAPI(TwitchAPIBase):
     get_stream_info = StreamsMixin.get_stream_info
 
     get_channel_rewards = RewardsMixin.get_channel_rewards
+
+    get_game_thumbnail = GamesMixin.get_game_thumbnail
 
     subscribe_to_raid = EventSubMixin.subscribe_to_raid
     subscribe_to_stream = EventSubMixin.subscribe_to_stream

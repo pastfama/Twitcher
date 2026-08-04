@@ -13,6 +13,7 @@ __pycache__/
 
 stream.ts
 last_channel.txt
+last_channels.txt
 transcript.txt
 transcript_debug.txt
 transcript_live.jsonl

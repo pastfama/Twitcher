@@ -1,8 +1,8 @@
 from .main import MainMenu
-from .current_watching import CurrentWatchingPanel
-from .next_stream import NextStreamPanel
-from .live_followed import LiveFollowedPanel
-from .chat_panel import ChatPanel
+from .currwatching import CurrentWatchingPanel
+from .nextstream import NextStreamPanel
+from .livefollowed import LiveFollowedPanel
+from .chatpanel import ChatPanel
 from .dispatcher_panel import DispatcherPanel
 from .log_window import LogWindow
 

@@ -5,6 +5,7 @@ import requests
 from dotenv import load_dotenv
 
 from twitch_auth import SCOPES as REQUIRED_SCOPES
+from twitch_api.config_loader import get_never_request_scopes
 
 
 # ============================================================
@@ -263,7 +264,7 @@ class TwitchTokenManager:
                     print()
 
                     print(
-                        "[TWITCH AUTH] Token is missing required scopes:"
+                        "[TWITCH AUTH] Token is missing some scopes (non-fatal):"
                     )
 
                     for scope in missing_scopes:
@@ -272,7 +273,44 @@ class TwitchTokenManager:
                             f"          {scope}"
                         )
 
-                    return False
+                    print(
+                        "[TWITCH AUTH] Token is still valid — "
+                        "some features may be unavailable."
+                    )
+
+                # ------------------------------------------------
+                # FORBIDDEN SCOPE CHECK
+                # Check if token has any scopes from the
+                # never_request list in config.yaml
+                # ------------------------------------------------
+
+                forbidden_scopes = [
+                    scope
+                    for scope in scopes
+                    if scope in get_never_request_scopes()
+                ]
+
+                if forbidden_scopes:
+
+                    print()
+
+                    print(
+                        "[TWITCH AUTH] WARNING: Token has forbidden scopes:"
+                    )
+
+                    for scope in forbidden_scopes:
+
+                        print(
+                            f"          {scope}"
+                        )
+
+                    print(
+                        "[TWITCH AUTH] These scopes should never be requested."
+                    )
+
+                    print(
+                        "[TWITCH AUTH] See twitch_api/config.yaml for details."
+                    )
 
                 return True
 

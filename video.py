@@ -30,6 +30,9 @@ from PySide6.QtWidgets import (
 
 from logger import debug, info, warning, error
 
+from core.channel_history import load_channels, save_channel
+from core.stream_resolver import resolve_stream_url, StreamResolverError
+
 
 # ============================================================
 # CONFIGURATION
@@ -149,6 +152,13 @@ class VideoWindow(QWidget):
         # ====================================================
 
         self.restore_saved_state()
+
+        # ====================================================
+        # RECENT CHANNELS (auth-independent)
+        # ====================================================
+
+        self.current_channel = ""
+        self.recent_channels = load_channels()
 
     # ========================================================
     # UI
@@ -701,6 +711,67 @@ class VideoWindow(QWidget):
         )
 
         self.fullscreen_overlay.hide()
+
+    # ========================================================
+    # AUTH-INDEPENDENT CHANNEL PLAYBACK
+    # ========================================================
+
+    def get_player_state(self):
+        """Return {'playing': bool} or None if unavailable."""
+        try:
+            if self.player:
+                state = self.player.get_state()
+                return {"playing": state == vlc.State.Playing}
+        except Exception:
+            pass
+        return None
+
+    def start_channel(self, channel):
+        """Resolve and play *channel* with no Twitch auth (streamlink).
+
+        Records the channel in the last-10 history text file.
+        """
+        channel = str(channel or "").strip().lstrip("#").lower()
+        if not channel:
+            debug("[VIDEO] start_channel called with empty channel")
+            return False
+
+        debug(f"[VIDEO] Resolving channel '{channel}' (auth-free)...")
+        try:
+            url = resolve_stream_url(channel)
+        except StreamResolverError as exc:
+            self.set_status("\u25cf NO STREAM", "#e66f7a")
+            debug(f"[VIDEO] Could not resolve '{channel}': {exc}")
+            return False
+
+        ok = self.start_video(url)
+        if ok:
+            self.current_channel = channel
+            save_channel(channel)
+            self.recent_channels = load_channels()
+            self.setWindowTitle(f"TWITCHER // {channel}")
+            debug(f"[VIDEO] Now playing '{channel}' (auth-free)")
+        return ok
+
+    def play_last_channels(self):
+        """Try the last 10 played channels one-by-one until one plays.
+
+        Returns True if a channel started, False if none were resolvable.
+        """
+        channels = load_channels()
+        if not channels:
+            debug("[VIDEO] No recent channels to try")
+            self.set_status("\u25cf NO HISTORY", "#e6c875")
+            return False
+
+        debug(f"[VIDEO] Trying {len(channels)} recent channels: {channels}")
+        for channel in channels:
+            debug(f"[VIDEO] Trying last channel '{channel}'...")
+            if self.start_channel(channel):
+                return True
+        debug("[VIDEO] None of the recent channels could be played")
+        self.set_status("\u25cf ALL OFFLINE", "#e66f7a")
+        return False
 
     # ========================================================
     # VLC

@@ -5,21 +5,17 @@ from PySide6.QtWidgets import QMainWindow
 
 from logger import debug
 from video import VideoWindow
-from dispatcher import StreamDispatcher
-from raid_monitor import RaidMonitor
+from core import StreamDispatcher, RaidMonitor, ViewerTracker, ViewerMonitor, wait_for_pending, TimeBoss
 from .app_runtime import MainMenuRuntime
 from .channel_state import MainMenuStreamState
-from .current_watching import CurrentWatchingPanel
+from .currwatching import CurrentWatchingPanel
 from .dispatcher_panel import DispatcherPanel
-from .live_followed import LiveFollowedPanel
-from .chat_panel import ChatPanel
-from .next_stream import NextStreamPanel
+from .livefollowed import LiveFollowedPanel
+from .chatpanel import ChatPanel
+from .nextstream import NextStreamPanel
 from .raid_runtime import MainMenuRaidRuntime
-from .viewer_tracker import ViewerTracker
-from .viewer_monitor import ViewerMonitor
-from .analytics_engine import AnalyticsEngine
+from core.analytics_engine import AnalyticsEngine
 from .window_state import MainMenuWindowState
-from .workers import wait_for_pending
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,11 +30,13 @@ class MainMenu(
     MainMenuRaidRuntime
 ):
 
-    def __init__(self, api):
+    def __init__(self, api, video_window=None):
 
         super().__init__()
 
         self.api = api
+
+        self._injected_video_window = video_window
 
         self.settings = QSettings(
             "Twitcher",
@@ -57,7 +55,7 @@ class MainMenu(
         self.is_loading_channels = False
         self.pending_channel = None
 
-        self.video_window = VideoWindow()
+        self.video_window = self._injected_video_window or VideoWindow()
         self.log_window = None
 
 
@@ -71,11 +69,14 @@ class MainMenu(
         )
 
 
+        self.time_boss = TimeBoss(self)
+
         self.viewer_monitor = ViewerMonitor(
             api=self.api,
             tracker=self.viewer_tracker,
-            get_live_channels=lambda: self.live_channels,
-            update_callback=self.update_current_stream_view
+            get_live_channels=self._fetch_live_channels,
+            update_callback=self.update_current_stream_view,
+            analytics_engine=self.analytics_engine,
         )
 
 
@@ -108,6 +109,10 @@ class MainMenu(
         )
 
 
+        # Register raid monitor with TimeBoss (no separate thread timer).
+        self.raid_monitor.start(self.time_boss)
+
+
         self.dispatcher = StreamDispatcher(
             api=self.api,
             video_window=self.video_window,
@@ -133,16 +138,56 @@ class MainMenu(
         self.restore_window_geometry()
 
 
-        self.viewer_monitor.start()
+        # Give TimeBoss direct control of the video window (highest priority).
+        self.time_boss.set_video_window(self.video_window)
+
+        # Register video auto-play as the highest-priority slot.
+        # This makes the video window completely independent of Twitch auth:
+        # it only uses local channel history + the auth-free stream resolver.
+        self.time_boss.register(
+            "video_player",
+            lambda: self.time_boss.ensure_video_playing(self._get_recent_channels_for_video),
+            priority=TimeBoss.PRIORITY_VIDEO,
+        )
+
+        self.viewer_monitor.start(self.time_boss)
+        self.time_boss.start()
 
         self.log(
-            "Viewer monitor started."
+            "Viewer monitor started (TimeBoss-driven)."
         )
+
+        # Restore cached streamer data into UI panels so they render
+        # immediately without waiting for Twitch API responses.
+        self._load_cached_streamer_data()
 
 
         self.load_twitch()
 
 
+
+    def _get_recent_channels_for_video(self):
+        """Return recent channels for TimeBoss video auto-play."""
+        try:
+            return load_channels()
+        except Exception:
+            return []
+
+    def _load_cached_streamer_data(self):
+        """Populate UI panels with locally-cached streamer metadata."""
+        try:
+            from core.streamer_history import load_streamer_data
+            data = load_streamer_data()
+            if not data:
+                return
+            # Pre-fill avatar cache so enrich_stream_with_avatar is instant.
+            for login, entry in data.items():
+                avatar = entry.get("avatar_url")
+                if avatar:
+                    self.avatar_cache[login] = avatar
+            self.log(f"Loaded cached data for {len(data)} streamers")
+        except Exception as exc:
+            self.log(f"Could not load cached streamer data: {exc}")
 
     def enrich_stream_with_avatar(self, stream):
 
@@ -305,19 +350,18 @@ class MainMenu(
 
 
         try:
-            self.viewer_monitor.stop()
+            self.viewer_monitor.stop(self.time_boss)
+        except Exception:
+            pass
+
+        try:
+            self.raid_monitor.stop(self.time_boss)
         except Exception:
             pass
 
 
         try:
             self.video_window.save_window_state()
-        except Exception:
-            pass
-
-
-        try:
-            self.raid_monitor.stop()
         except Exception:
             pass
 

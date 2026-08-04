@@ -4,8 +4,6 @@ import subprocess
 import requests
 from dotenv import load_dotenv
 
-from twitch_token_manager import get_valid_token
-
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)).rsplit("twitch_api", 1)[0]
 ENV_FILE = os.path.join(BASE_DIR, ".env")
@@ -24,9 +22,14 @@ class TwitchAPIError(RuntimeError):
 
 
 class TwitchAPIBase:
-    def __init__(self):
+    def __init__(self, access_token=None):
         self.validate_configuration()
-        self.access_token = get_valid_token()
+        # Use pre-validated token if provided (avoids double validation)
+        if access_token:
+            self.access_token = access_token
+        else:
+            from twitch_token_manager import get_valid_token
+            self.access_token = get_valid_token()
         if not self.access_token:
             raise RuntimeError("Could not obtain a valid Twitch user access token.")
         self.headers = {

@@ -8,6 +8,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget, QMessageBox
 
 from logger import LOG_FILE
+from twitch_token_manager import get_valid_token
 from .log_window import LogWindow
 from .style import MAIN_WINDOW_STYLESHEET
 
@@ -59,15 +60,18 @@ class MainMenuWindowState:
         middle_layout = QHBoxLayout()
         middle_layout.setSpacing(10)
         self.live_followed_panel = self.live_followed_panel_cls()
+        # Wire the new LiveFollowedPanel signals.
         self.live_followed_panel.channel_selected.connect(self.channel_selected)
-        self.live_followed_panel.refresh_requested.connect(self.load_live_channels)
         self.live_followed_panel.watch_requested.connect(self.watch_selected)
-        self.live_followed_panel.stop_requested.connect(self.stop_video)
-        self.chat_panel = self.chat_panel_cls(access_token=os.getenv("TWITCH_ACCESS_TOKEN", ""))
+        # Inject dependencies the new panel needs for analytics/avatars.
+        self.live_followed_panel.set_api(self.api)
+        self.live_followed_panel.set_viewer_tracker(self.viewer_tracker)
+        self.live_followed_panel.set_analytics_engine(self.analytics_engine)
+        self.chat_panel = self.chat_panel_cls(access_token=get_valid_token() or "")
         self.dispatcher_panel = self.dispatcher_panel_cls()
-        middle_layout.addWidget(self.live_followed_panel, 25)
-        middle_layout.addWidget(self.chat_panel, 50)
-        middle_layout.addWidget(self.dispatcher_panel, 25)
+        middle_layout.addWidget(self.live_followed_panel, 1)
+        middle_layout.addWidget(self.chat_panel, 3)
+        middle_layout.addWidget(self.dispatcher_panel, 1)
         main_layout.addLayout(middle_layout, 1)
 
     def log(self, message):
