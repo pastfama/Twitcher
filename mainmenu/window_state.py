@@ -22,43 +22,7 @@ class MainMenuWindowState:
         main_layout.setSpacing(10)
         self.setStyleSheet(MAIN_WINDOW_STYLESHEET)
 
-        from .theme import Theme
-
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(12)
-
-        header = QLabel("TWITCHER")
-        header.setFont(QFont(Theme.FAMILY, 24, QFont.Weight.Bold))
-        header.setStyleSheet(f"color: {Theme.CYAN}; letter-spacing: 3px;")
-        header_layout.addWidget(header)
-
-        subtitle = QLabel("CONTROL CENTER")
-        subtitle.setFont(QFont(Theme.FAMILY, 9, QFont.Weight.Bold))
-        subtitle.setStyleSheet(f"color: {Theme.GAME_DIM}; letter-spacing: 1px; padding-top: 4px;")
-        header_layout.addWidget(subtitle)
-
-        header_layout.addStretch()
-
-        self.connection_label = QLabel("OFFLINE")
-        self.connection_label.setFont(QFont(Theme.FAMILY, 10, QFont.Weight.Bold))
-        self.connection_label.setStyleSheet(f"""
-            color: {Theme.RED_DARK};
-            background-color: {Theme.DARK_PANEL};
-            border: 1px solid {Theme.RED_DARK};
-            border-radius: 4px;
-            padding: 4px 10px;
-        """)
-        header_layout.addWidget(self.connection_label)
-
-        self.logs_button = QPushButton("LOGS")
-        self.logs_button.clicked.connect(self.open_logs)
-        header_layout.addWidget(self.logs_button)
-
-        self.reauth_button = QPushButton("RE-AUTH")
-        self.reauth_button.clicked.connect(self.reauthenticate)
-        header_layout.addWidget(self.reauth_button)
-
-        main_layout.addLayout(header_layout)
+        # Header removed to maximize panel space
 
         # --- Create all panels ---
         self.current_panel = self.current_panel_cls()

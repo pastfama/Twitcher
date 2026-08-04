@@ -28,109 +28,32 @@ from video import VideoWindow
 # ============================================================
 
 
-def print_monitors(
-
-    app
-
-):
-
+def print_monitors(app):
     screens = app.screens()
-
     print()
-
-    print(
-
-        "============================================================"
-
-    )
-
-    print(
-
-        "[DISPLAY] DETECTED MONITORS"
-
-    )
-
-    print(
-
-        "============================================================"
-
-    )
-
-    print(
-
-        f"[DISPLAY] Monitor count: "
-
-        f"{len(screens)}"
-
-    )
-
+    print("=" * 60)
+    print("[DISPLAY] DETECTED MONITORS")
+    print("=" * 60)
+    print()
+    print(f"[DISPLAY] Monitor count: {len(screens)}")
+    print()
     primary = app.primaryScreen()
 
-    for index, screen in enumerate(
-
-        screens
-
-    ):
-
+    for index, screen in enumerate(screens):
         geometry = screen.availableGeometry()
-
-        is_primary = (
-
-            screen == primary
-
-        )
-
+        is_primary = screen == primary
         print()
-
-        print(
-
-            f"[DISPLAY] Monitor {index + 1}"
-
-        )
-
-        print(
-
-            f"          Name: "
-
-            f"{screen.name()}"
-
-        )
-
-        print(
-
-            f"          Resolution: "
-
-            f"{geometry.width()}x"
-
-            f"{geometry.height()}"
-
-        )
-
-        print(
-
-            f"          Position: "
-
-            f"({geometry.x()}, "
-
-            f"{geometry.y()})"
-
-        )
-
-        print(
-
-            f"          Primary: "
-
-            f"{is_primary}"
-
-        )
+        print(f"[DISPLAY] Monitor {index + 1}")
+        print(f"          Name: {screen.name()}")
+        print()
+        print(f"          Resolution: {geometry.width()}x{geometry.height()}")
+        print()
+        print(f"          Position: ({geometry.x()}, {geometry.y()})")
+        print()
+        print(f"          Primary: {is_primary}")
 
     print()
-
-    print(
-
-        "============================================================"
-
-    )
+    print("=" * 60)
 
 
 # ============================================================
@@ -138,59 +61,18 @@ def print_monitors(
 # ============================================================
 
 
-def show_startup_error(
-
-    title,
-
-    error,
-
-    wait=True
-
-):
-
+def show_startup_error(title, error, wait=True):
     print()
-
-    print(
-
-        "============================================================"
-
-    )
-
-    print(
-
-        title
-
-    )
-
-    print(
-
-        "============================================================"
-
-    )
-
+    print("=" * 60)
+    print(title)
+    print("=" * 60)
     print()
-
-    print(
-
-        f"{type(error).__name__}: "
-
-        f"{error}"
-
-    )
-
+    print(f"{type(error).__name__}: {error}")
     print()
-
     traceback.print_exc()
-
     print()
-
     if wait:
-
-        input(
-
-            "Press Enter to exit..."
-
-        )
+        input("Press Enter to exit...")
 
 
 # ============================================================
@@ -199,25 +81,9 @@ def show_startup_error(
 
 
 def create_application():
-
-    app = QApplication(
-
-        sys.argv
-
-    )
-
-    app.setOrganizationName(
-
-        "Twitcher"
-
-    )
-
-    app.setApplicationName(
-
-        "Twitcher Control Center"
-
-    )
-
+    app = QApplication(sys.argv)
+    app.setOrganizationName("Twitcher")
+    app.setApplicationName("Twitcher Control Center")
     return app
 
 
@@ -227,54 +93,26 @@ def create_application():
 
 
 def initialize_twitch_authentication():
-
     print()
-
-    print(
-
-        "[TWITCH] Validating Twitch authentication..."
-
-    )
-
+    print("[TWITCH] Validating Twitch authentication...")
     access_token = get_valid_token()
 
-
     if not access_token:
-
         print()
-
-        print(
-            "[TWITCH] No valid Twitch token found. Starting authorization flow..."
-        )
-
+        print("[TWITCH] No valid Twitch token found. Starting authorization flow...")
         authenticate()
-
         access_token = get_valid_token()
 
-
     if not access_token:
-
         raise RuntimeError(
-
             "Twitch authentication is unavailable.\n\n"
-
             "The access token is invalid and could not be refreshed.\n\n"
-
             "Run twitch_auth.py to authenticate again."
-
         )
 
-
     print()
-
-    print(
-
-        "[TWITCH] Twitch authentication is ready."
-
-    )
-
+    print("[TWITCH] Twitch authentication is ready.")
     print()
-
     return access_token
 
 
@@ -283,12 +121,7 @@ def initialize_twitch_authentication():
 # ============================================================
 
 
-def start_twitcher(
-
-    app
-
-):
-
+def start_twitcher(app):
     # --------------------------------------------------------
     # AUTH-INDEPENDENT VIDEO WINDOW
     # --------------------------------------------------------
@@ -299,25 +132,11 @@ def start_twitcher(
     # the background.
 
     print()
-
-    print(
-
-        "[VIDEO] Creating standalone VideoWindow (auth-free)..."
-
-    )
-
+    print("[VIDEO] Creating standalone VideoWindow (auth-free)...")
     video_window = VideoWindow()
-
     video_window.play_last_channels()
-
     print()
-
-    print(
-
-        "[VIDEO] Video Window shown (auth-independent)"
-
-    )
-
+    print("[VIDEO] Video Window shown (auth-independent)")
 
     # --------------------------------------------------------
     # TWITCH AUTHENTICATION
@@ -325,188 +144,69 @@ def start_twitcher(
 
     access_token = initialize_twitch_authentication()
 
-
     # --------------------------------------------------------
     # TWITCH API
     # --------------------------------------------------------
 
     print()
-
-    print(
-
-        "[TWITCH] Initializing Twitch API..."
-
-    )
-
+    print("[TWITCH] Initializing Twitch API...")
     api = TwitchAPI(access_token=access_token)
-
 
     # --------------------------------------------------------
     # MAIN WINDOW
     # --------------------------------------------------------
 
     print()
-
-    print(
-
-        "[WINDOW] Creating MainMenu..."
-
-    )
-
-    window = MainMenu(
-
-        api,
-
-        video_window=video_window
-
-    )
-
+    print("[WINDOW] Creating MainMenu...")
+    window = MainMenu(api, video_window=video_window)
     window.show()
-
 
     # --------------------------------------------------------
     # RESTORE CONTROL CENTER
     # --------------------------------------------------------
 
-    if hasattr(
-
-        window,
-
-        "restore_saved_geometry"
-
-    ):
-
+    if hasattr(window, "restore_saved_geometry"):
         print()
-
-        print(
-
-            "[WINDOW] Restoring Control Center geometry..."
-
-        )
-
+        print("[WINDOW] Restoring Control Center geometry...")
         window.restore_saved_geometry()
 
-
-    elif hasattr(
-
-        window,
-
-        "move_to_secondary_monitor"
-
-    ):
-
+    elif hasattr(window, "move_to_secondary_monitor"):
         print()
-
-        print(
-
-            "[WINDOW] Moving Control Center "
-
-            "to secondary monitor..."
-
-        )
-
+        print("[WINDOW] Moving Control Center to secondary monitor...")
         window.move_to_secondary_monitor()
-
 
     # --------------------------------------------------------
     # RESTORE VIDEO WINDOW
     # --------------------------------------------------------
 
-    video_window = getattr(
-
-        window,
-
-        "video_window",
-
-        None
-
-    )
-
+    video_window = getattr(window, "video_window", None)
 
     if video_window:
-
         print()
+        print("[WINDOW] Restoring Video Window...")
 
-        print(
-
-            "[WINDOW] Restoring Video Window..."
-
-        )
-
-
-        if hasattr(
-
-            video_window,
-
-            "restore_saved_state"
-
-        ):
-
+        if hasattr(video_window, "restore_saved_state"):
             video_window.restore_saved_state()
 
-
-        elif hasattr(
-
-            video_window,
-
-            "restore_saved_geometry"
-
-        ):
-
+        elif hasattr(video_window, "restore_saved_geometry"):
             video_window.restore_saved_geometry()
 
-
-        elif hasattr(
-
-            video_window,
-
-            "place_on_primary_monitor"
-
-        ):
-
+        elif hasattr(video_window, "place_on_primary_monitor"):
             video_window.place_on_primary_monitor()
 
         video_window.show()
-
         print()
-
-        print(
-
-            "[WINDOW] Video Window shown"
-
-        )
-
+        print("[WINDOW] Video Window shown")
 
     # --------------------------------------------------------
     # READY
     # --------------------------------------------------------
 
     print()
-
-    print(
-
-        "[WINDOW] Twitcher initialized."
-
-    )
-
+    print("[WINDOW] Twitcher initialized.")
     print()
-
-    print(
-
-        "[WINDOW] Control Center: "
-
-        "RESTORED POSITION"
-
-    )
-
-    print(
-
-        "[WINDOW] Video Player: "
-
-        "RESTORED POSITION"
-
-    )
-
+    print("[WINDOW] Control Center: RESTORED POSITION")
+    print("[WINDOW] Video Player: RESTORED POSITION")
     print()
 
     return window
@@ -529,7 +229,6 @@ def enable_verbose_logging():
 
 
 def main():
-
     # --------------------------------------------------------
     # VERBOSE DEBUGGING (from start_twitcher_watch.bat)
     # --------------------------------------------------------
@@ -546,55 +245,21 @@ def main():
     # and condition exceeded"), which also floods the logs.
 
     lock_file = QLockFile(
-
-        os.path.join(
-
-            QDir.tempPath(),
-
-            "twitcher-control-center.lock"
-
-        )
-
+        os.path.join(QDir.tempPath(), "twitcher-control-center.lock")
     )
 
     if not lock_file.tryLock(100):
-
         print()
-
-        print(
-
-            "[LOCK] Another Twitcher instance is already running. "
-
-            "This instance will exit."
-
-        )
-
+        print("[LOCK] Another Twitcher instance is already running. "
+              "This instance will exit.")
         print()
-
         return
 
     print()
-
-    print(
-
-        "============================================================"
-
-    )
-
-    print(
-
-        "                 TWITCHER CONTROL CENTER"
-
-    )
-
-    print(
-
-        "============================================================"
-
-    )
-
+    print("=" * 60)
+    print("                 TWITCHER CONTROL CENTER")
+    print("=" * 60)
     print()
-
 
     # --------------------------------------------------------
     # QT APPLICATION
@@ -602,50 +267,28 @@ def main():
 
     app = create_application()
 
-
     # --------------------------------------------------------
     # MONITORS
     # --------------------------------------------------------
 
-    print_monitors(
-
-        app
-
-    )
-
+    print_monitors(app)
 
     # --------------------------------------------------------
     # STARTUP
     # --------------------------------------------------------
 
     try:
-
-        window = start_twitcher(
-
-            app
-
-        )
-
+        window = start_twitcher(app)
 
     except Exception as error:
-
-        show_startup_error(
-
-            "[STARTUP ERROR] Twitcher failed to start.",
-
-            error
-
-        )
-
+        show_startup_error("[STARTUP ERROR] Twitcher failed to start.", error)
         return
-
 
     # --------------------------------------------------------
     # RUN EVENT LOOP
     # --------------------------------------------------------
 
     try:
-
         if os.environ.get("TWITCHER_WATCH") == "1":
             debug("Watch mode enabled; starting source watcher")
             root = Path(__file__).parent
@@ -666,14 +309,8 @@ def main():
         sys.exit(exit_code)
 
     except Exception as error:
+        show_startup_error("[RUNTIME ERROR] Twitcher crashed.", error)
 
-        show_startup_error(
-
-            "[RUNTIME ERROR] Twitcher crashed.",
-
-            error
-
-        )
 
 def watch_files_and_exit_on_change(paths, interval=1.0):
     """Exit when a watched Python source file changes.
@@ -721,5 +358,4 @@ def watch_files_and_exit_on_change(paths, interval=1.0):
 
 
 if __name__ == "__main__":
-
     main()

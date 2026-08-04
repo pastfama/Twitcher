@@ -11,7 +11,17 @@ class MainMenuStreamState:
         channels to check. Returns self.live_channels
         which is populated asynchronously by load_twitch.
         """
-        return self.live_channels or []
+        channels = self.live_channels or []
+        # Safety net: always include current_stream so ViewerMonitor tracks it.
+        current_login = None
+        if self.current_stream:
+            current_login = self.current_stream.get('user_login')
+            if self.current_stream not in channels:
+                channels = channels + [self.current_stream]
+        from logger import debug
+        debug(f"[CHANNEL STATE] _fetch_live_channels: live_channels={len(self.live_channels or [])}, current_stream={current_login}, returning={len(channels)}")
+        print(f"[CHANNEL STATE] _fetch_live_channels: live_channels={len(self.live_channels or [])}, current_stream={current_login}, returning={len(channels)}")
+        return channels
 
     def load_twitch(self):
 
@@ -283,6 +293,9 @@ class MainMenuStreamState:
 
         self.current_stream = matching_stream
 
+        # Ensure the channel is in live_channels so ViewerMonitor tracks it.
+        if matching_stream not in self.live_channels:
+            self.live_channels.append(matching_stream)
 
         self.log(
             f"Resuming previous streamer: #{last_streamer}"
@@ -394,7 +407,7 @@ class MainMenuStreamState:
 
 
 
-    def update_current_stream_view(self, stream):
+    def update_current_stream_view(self, stream, analytics=None):
 
         if not stream:
 
@@ -407,11 +420,16 @@ class MainMenuStreamState:
             stream
         )
 
+        # Use analytics from viewer monitor if provided; otherwise compute it.
+        if analytics is None:
+            analysis = self.analytics_engine.update_stream(
+                enriched_stream
+            )
+        else:
+            analysis = analytics
 
-        analysis = self.analytics_engine.update_stream(
-            enriched_stream
-        )
-
+        # Ensure current_stream is set for analytics engine reference.
+        self.current_stream = enriched_stream
 
         self.current_panel.set_stream(
             enriched_stream,
@@ -427,6 +445,11 @@ class MainMenuStreamState:
 
 
         self.current_stream = stream
+
+
+        # Ensure the channel is in live_channels so ViewerMonitor tracks it.
+        if stream not in self.live_channels:
+            self.live_channels.append(stream)
 
 
         self.update_current_stream_view(
@@ -586,6 +609,9 @@ class MainMenuStreamState:
             or self.current_stream
         )
 
+        # Ensure the channel is in live_channels so ViewerMonitor tracks it.
+        if self.current_stream not in self.live_channels:
+            self.live_channels.append(self.current_stream)
 
         self.save_last_streamer(
             channel

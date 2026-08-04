@@ -5,6 +5,7 @@ QThreadPool so the GUI thread never blocks.
 from PySide6.QtCore import QObject
 
 from core.workers import run_in_background
+from logger import debug
 
 
 class ViewerMonitor(QObject):
@@ -55,13 +56,16 @@ class ViewerMonitor(QObject):
         immediately.
         """
 
+        import sys
         print(
-            "[VIEWER MONITOR] Tick (dispatching)"
+            "[VIEWER MONITOR] Tick (dispatching)",
+            file=sys.stderr
         )
 
         try:
 
             channels = self.get_live_channels()
+            print(f"[VIEWER MONITOR] Got {len(channels)} channels from get_live_channels()")
 
             if not channels:
                 print(
@@ -96,7 +100,7 @@ class ViewerMonitor(QObject):
 
                     run_in_background(
                         lambda login=login: self._check_channel(login),
-                        lambda stream, login=login: self._on_channel_checked(login, stream),
+                        lambda result, login=login: self._on_channel_checked(login, result),
                         lambda message, login=login: self._on_channel_error(login, message),
                     )
 
@@ -164,9 +168,11 @@ class ViewerMonitor(QObject):
         try:
 
             if not result:
+                debug(f"[VIEWER MONITOR] No result for {login}")
                 return
 
             stream, analytics = result
+            debug(f"[VIEWER MONITOR] Result for {login}: viewers={stream.get('viewer_count', 0)}, has_analytics={analytics is not None}, sully={analytics.get('sullygoose', {}) if analytics else {}}")
 
             # The analytics dict contains emoji status labels (🚀🟢📉🔴🟡),
             # which are fine for Qt UI but crash Windows console print()
@@ -178,9 +184,10 @@ class ViewerMonitor(QObject):
                 analytics_text = f" ({safe_status})"
 
             if self.update_callback:
-
+                debug(f"[VIEWER MONITOR] Calling update_callback for {login}")
                 self.update_callback(
-                    stream
+                    stream,
+                    analytics
                 )
 
             self._safe_print(

@@ -1,6 +1,6 @@
 import os
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Signal, QObject, Qt
 from PySide6.QtWidgets import QMainWindow
 
 from logger import debug
@@ -20,6 +20,10 @@ from .window_state import MainMenuWindowState
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
+
+
+class _AnalyticsBridge(QObject):
+    analytics_updated = Signal(object, object)  # stream, analysis
 
 
 class MainMenu(
@@ -57,6 +61,8 @@ class MainMenu(
 
         self.video_window = self._injected_video_window or VideoWindow()
         self.log_window = None
+        self._analytics_bridge = _AnalyticsBridge()
+        self._analytics_bridge.analytics_updated.connect(self._on_analytics_signal, Qt.QueuedConnection)
 
 
         #
@@ -65,7 +71,8 @@ class MainMenu(
         self.viewer_tracker = ViewerTracker()
 
         self.analytics_engine = AnalyticsEngine(
-            viewer_tracker=self.viewer_tracker
+            viewer_tracker=self.viewer_tracker,
+            on_analytics_updated=lambda stream, analysis: self._analytics_bridge.analytics_updated.emit(stream, analysis)
         )
 
 
@@ -150,16 +157,30 @@ class MainMenu(
             priority=TimeBoss.PRIORITY_VIDEO,
         )
 
-        self.viewer_monitor.start(self.time_boss)
-
         # Register a TimeBoss task to periodically fetch SG data for live channels.
         self.time_boss.register(
             "sg_fetch",
             lambda: self.analytics_engine.fetch_all_live_channels(
-                self.live_channels
+                self._fetch_live_channels()
             ),
             priority=TimeBoss.PRIORITY_ANALYTICS,
         )
+
+        # Register MOM+SG refresh (every 4 seconds via TimeBoss tick)
+        self.time_boss.register(
+            "momsg_refresh",
+            lambda: self._refresh_momsg(),
+            priority=TimeBoss.PRIORITY_UI,
+        )
+
+        # Register periodic live channels refresh (every 4 seconds)
+        self.time_boss.register(
+            "live_channels_refresh",
+            lambda: self._refresh_live_channels(),
+            priority=TimeBoss.PRIORITY_UI,
+        )
+
+        self.viewer_monitor.start(self.time_boss)
 
         self.time_boss.start()
 
@@ -175,6 +196,50 @@ class MainMenu(
         self.load_twitch()
 
 
+
+    def _on_analytics_signal(self, stream, analysis):
+        """Handle analytics update from background thread via signal."""
+        print(f"[MAIN MENU] _on_analytics_signal called: stream={stream.get('user_login') if stream else None}, has_sullygoose={'sullygoose' in (analysis or {})}")
+        if stream and analysis:
+            # Force update even if viewer_monitor also updates - this has the fresh data
+            self.current_stream = stream
+            self.update_current_stream_view(stream, analysis)
+
+    def _refresh_momsg(self):
+        """Refresh MOM and SG widgets every 4 seconds via TimeBoss.
+        
+        Calls panel.refresh_momsg() which updates:
+        - MOM gauge (momentum), LCD (viewer count), graph (history)
+        - SG metrics that change frequently
+        - Persists viewer history to DB
+        """
+        if hasattr(self, 'current_panel') and self.current_panel:
+            self.current_panel.refresh_momsg(self.current_stream, self.current_panel.viewer_analysis)
+
+    def _refresh_live_channels(self):
+        """Periodically refresh the live channels list from Twitch API.
+        
+        This ensures the viewer_monitor always has fresh channel data
+        to work with on each tick.
+        """
+        if self.is_closing or not self.user:
+            return
+        
+        # Only refresh if we don't have live channels or it's been a while
+        if not self.live_channels:
+            print("[LIVE CHANNELS] Refreshing (empty list)")
+            self.load_live_channels()
+        else:
+            # Check if current_stream is in live_channels
+            if self.current_stream:
+                current_login = self.current_stream.get('user_login')
+                in_list = any(
+                    s.get('user_login') == current_login 
+                    for s in self.live_channels
+                )
+                if not in_list:
+                    print(f"[LIVE CHANNELS] Adding current_stream {current_login} to list")
+                    self.live_channels.append(self.current_stream)
 
     def _get_recent_channels_for_video(self):
         """Return recent channels for TimeBoss video auto-play from DB."""

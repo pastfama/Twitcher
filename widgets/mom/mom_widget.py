@@ -1,12 +1,12 @@
 """Circular analog gauge QWidget for displaying momentum values.
 
-This widget shows a circular gauge with a needle pointer that indicates
-values from 0-100 with color-coded zones:
-- 0-30: Red (declining)
-- 30-50: Orange
-- 50-70: Yellow (stable)
-- 70-85: Cyan (rising)
-- 85-100: Green (strong rise)
+Modern dark-themed gauge with smooth arcs and clean typography.
+
+Size constants (codewide):
+- MOM_WIDTH: Total width of MOM section in panel
+- GAUGE_SIZE: Diameter of circular gauge
+- LCD_WIDTH/LCD_HEIGHT: Size of viewer count display
+- GRAPH_HEIGHT: Height of viewer history graph strip
 """
 
 import math
@@ -16,63 +16,52 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 
+# Top-level size constants (codewide)
+MOM_WIDTH = 280
+GAUGE_SIZE = 80
+LCD_WIDTH = 140
+LCD_HEIGHT = 60
+GRAPH_HEIGHT = 30
+
+
 class AnalogGauge(QWidget):
-    """Circular analog gauge with needle showing momentum value (0-100).
+    """Circular analog gauge with needle showing momentum value (0-100)."""
 
-    Usage:
-        gauge = AnalogGauge()
-        gauge.set_value(75, "MOM")  # Set value and label, triggers repaint
-    """
+    # Class constants
+    DEFAULT_SIZE = GAUGE_SIZE
 
-    def __init__(self, parent=None, size=90):
+    def __init__(self, parent=None, size=None):
         super().__init__(parent)
-        self._value = 50  # 0-100 scale
+        self._value = 50
         self._label = "MOM"
-        self._width = size
-        self._height = size
-        self.setFixedSize(size, size)
-
-    def setFixedSize(self, width, height):
-        """Set fixed dimensions for the gauge."""
-        self._width = width
-        self._height = height
-        super().setFixedSize(width, height)
+        self._size = size if size is not None else self.DEFAULT_SIZE
+        self.setFixedSize(self._size, self._size)
 
     def sizeHint(self):
-        """Return recommended size."""
-        return QSize(self._width, self._height)
+        return QSize(self._size, self._size)
 
     def set_value(self, value: int, label: str = None):
-        """Set value from 0 to 100 and repaint.
-
-        Args:
-            value: Momentum value (0-100)
-            label: Optional text label to display below gauge
-        """
         self._value = max(0, min(100, int(value)))
         if label is not None:
             self._label = label
         self.update()
 
     def get_value(self):
-        """Return current gauge value."""
         return self._value
 
     def get_color(self):
-        """Return current color based on value."""
         if self._value < 30:
-            return QColor(255, 80, 80)  # Red - declining
+            return QColor(255, 80, 80)
         elif self._value < 50:
-            return QColor(255, 165, 0)  # Orange
+            return QColor(255, 165, 0)
         elif self._value < 70:
-            return QColor(255, 200, 0)  # Yellow - stable
+            return QColor(200, 180, 0)
         elif self._value < 85:
-            return QColor(0, 255, 255)  # Cyan - rising
+            return QColor(0, 200, 255)
         else:
-            return QColor(0, 255, 128)  # Green - strong rise
+            return QColor(0, 255, 128)
 
     def paintEvent(self, event):
-        """Paint the gauge."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -82,19 +71,18 @@ class AnalogGauge(QWidget):
         cy = h / 2
         r = min(w, h) / 2 - 6
 
-        # --- background circle ---
-        bg_pen = QPen(QColor(40, 40, 40))
+        # Background
+        bg_pen = QPen(QColor(30, 30, 45))
         bg_pen.setWidthF(4)
         painter.setPen(bg_pen)
-        painter.setBrush(QColor(26, 26, 46))
+        painter.setBrush(QColor(20, 20, 35))
         painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
-        # --- value arc (from 135deg, sweeping 270deg clockwise) ---
-        start_angle = 135  # degrees, Qt measures counter-clockwise from 3 o'clock
+        # Value arc
+        start_angle = 135
         sweep = 270
         normalized = self._value / 100.0
         value_sweep = int(normalized * sweep)
-
         color = self.get_color()
 
         val_pen = QPen(color)
@@ -103,10 +91,10 @@ class AnalogGauge(QWidget):
         painter.drawArc(
             QRectF(cx - r, cy - r, r * 2, r * 2),
             start_angle * 16,
-            -value_sweep * 16  # negative = clockwise
+            -value_sweep * 16
         )
 
-        # --- needle ---
+        # Needle
         angle_deg = start_angle - normalized * sweep
         angle_rad = math.radians(angle_deg)
         needle_length = r - 8
@@ -118,12 +106,12 @@ class AnalogGauge(QWidget):
         painter.setPen(needle_pen)
         painter.drawLine(int(cx), int(cy), int(nx), int(ny))
 
-        # --- center dot ---
+        # Center dot
         painter.setBrush(color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QRectF(cx - 3, cy - 3, 6, 6))
 
-        # --- value text (centered) ---
+        # Value text
         painter.setPen(color)
         painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         painter.drawText(
@@ -132,8 +120,8 @@ class AnalogGauge(QWidget):
             str(self._value),
         )
 
-        # --- label (bottom) ---
-        painter.setPen(QColor(0, 255, 255))
+        # Label
+        painter.setPen(QColor(0, 200, 255))
         painter.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
         painter.drawText(
             QRectF(0, h - 13, w, 13),

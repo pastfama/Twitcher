@@ -73,6 +73,7 @@ class TimeBoss(QObject):
 
     def start(self):
         self.timer.start()
+        print("[TIMEBOSS] Timer started with interval:", self._tick_interval_ms, "ms")
         logger.debug("[TIMEBOSS] Started")
 
     def stop(self):
@@ -122,6 +123,7 @@ class TimeBoss(QObject):
         self._last_refresh = now
 
         if do_refresh:
+            print(f"[TIMEBOSS] Tick #{self._tick_count}: Running cycle at {now:.3f}")
             self._run_cycle()
             self.ticked.emit(self._tick_count)
 
@@ -136,12 +138,15 @@ class TimeBoss(QObject):
 
         all_entries.sort(key=lambda x: x[1]["priority"])
 
+        print(f"[TIMEBOSS] Running {len(all_entries)} slots")
         for name, entry in all_entries:
             cb = entry["cb"]
             key = id(cb)
             if key in self._pending[name]:
+                print(f"[TIMEBOSS] Skipping '{name}' (pending)")
                 continue
             self._pending[name].add(key)
+            print(f"[TIMEBOSS] Running '{name}'")
             run_in_background(
                 cb,
                 lambda result, n=name, k=key: self._on_done(n, k, result),

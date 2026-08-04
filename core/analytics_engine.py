@@ -35,7 +35,8 @@ class AnalyticsEngine:
         self,
         viewer_tracker=None,
         sullygoose_api=None,
-        fetch_failure_cooldown=300
+        fetch_failure_cooldown=300,
+        on_analytics_updated=None
     ):
 
         self.viewer_tracker = viewer_tracker
@@ -60,6 +61,7 @@ class AnalyticsEngine:
         self._pending_fetches = set()
         self._fetch_failure_cooldown = fetch_failure_cooldown
         self._failed_fetches = {}  # login -> last failure timestamp
+        self._on_analytics_updated = on_analytics_updated
 
         # Pre-load cached SG data from local JSON file.
         self._load_cached_data()
@@ -253,6 +255,17 @@ class AnalyticsEngine:
                         self._sully_cache[login] = stats
                     # Save to database for next startup.
                     store_sg(login, stats)
+                    debug(f"[ANALYTICS] Stored SullyGoose data for '{login}': {len(stats)} metrics")
+                    # Always notify UI — let the UI decide whether to use it.
+                    if self._on_analytics_updated:
+                        debug(f"[ANALYTICS] Fetch complete for '{login}' — triggering UI update")
+                        # Create a minimal stream dict if current_stream is None
+                        stream = self.current_stream or {"user_login": login, "user_name": login}
+                        analysis = self.update_stream(stream)
+                        # Ensure the freshly-fetched data is in the analysis
+                        if stats and "sullygoose" not in analysis:
+                            analysis["sullygoose"] = stats
+                        self._on_analytics_updated(stream, analysis)
                 else:
                     # Failed or empty — record failure timestamp for cooldown.
                     with self._cache_lock:
