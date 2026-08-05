@@ -279,23 +279,33 @@ class AnalyticsEngine:
                     # Save to database for next startup.
                     store_sg(login, stats, platform=platform)
                     debug(f"[ANALYTICS] Stored SullyGoose data for '{login}' ({platform}): {len(stats)} metrics")
-                    # Always notify UI — let the UI decide whether to use it.
+                    # Only notify UI if this channel is the one currently being watched.
+                    # Without this guard, a SullyGoose fetch completing for any channel
+                    # would overwrite the panel with stale data.
                     if self._on_analytics_updated:
-                        debug(f"[ANALYTICS] Fetch complete for '{login}' — triggering UI update")
-                        # Build a fresh analysis from the current stream
-                        # WITHOUT calling update_stream() (which would re-enter
-                        # collect_external_data and potentially re-fetch).
                         with self._stream_lock:
-                            stream = self.current_stream or {"user_login": login, "user_name": login}
-                        analysis = {
-                            "channel": stream.get("user_name") or stream.get("user_login") or login,
-                            "viewers": int(stream.get("viewer_count", 0)),
-                            "category": stream.get("game_name") or "Unknown",
-                            "title": stream.get("title", ""),
-                            "sullygoose": stats,
-                        }
-                        analysis["score"] = self.calculate_score(analysis)
-                        self._on_analytics_updated(stream, analysis)
+                            current = self.current_stream
+                        current_login = (
+                            (current.get("user_login") or current.get("user_name") or "")
+                            .lower().strip()
+                        )
+                        if current_login and login.lower().strip() != current_login:
+                            debug(f"[ANALYTICS] Fetch complete for '{login}' but current is '{current_login}' — skipping UI update")
+                        else:
+                            debug(f"[ANALYTICS] Fetch complete for '{login}' — triggering UI update")
+                            # Build a fresh analysis from the current stream
+                            # WITHOUT calling update_stream() (which would re-enter
+                            # collect_external_data and potentially re-fetch).
+                            stream = current or {"user_login": login, "user_name": login}
+                            analysis = {
+                                "channel": stream.get("user_name") or stream.get("user_login") or login,
+                                "viewers": int(stream.get("viewer_count", 0)),
+                                "category": stream.get("game_name") or "Unknown",
+                                "title": stream.get("title", ""),
+                                "sullygoose": stats,
+                            }
+                            analysis["score"] = self.calculate_score(analysis)
+                            self._on_analytics_updated(stream, analysis)
                 else:
                     # Failed or empty — record failure timestamp for cooldown.
                     with self._cache_lock:

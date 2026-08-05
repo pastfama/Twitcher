@@ -22,9 +22,11 @@ from logger import debug
 #                    CONFIGURATION
 # ============================================================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_FILE = os.path.join(BASE_DIR, ".env")
-TOKEN_FILE = os.path.join(BASE_DIR, "kick_token.json")
+from paths import get_data_dir
+
+_DATA_DIR = get_data_dir()
+ENV_FILE = os.path.join(_DATA_DIR, ".env")
+TOKEN_FILE = os.path.join(_DATA_DIR, "kick_token.json")
 
 KICK_API_BASE = "https://kick.com/api/v2"
 KICK_OAUTH_URL = "https://kick.com/oauth/authorize"

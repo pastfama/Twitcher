@@ -22,9 +22,11 @@ from logger import debug
 #                    CONFIGURATION
 # ============================================================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_FILE = os.path.join(BASE_DIR, ".env")
-TOKEN_FILE = os.path.join(BASE_DIR, "youtube_token.json")
+from paths import get_data_dir
+
+_DATA_DIR = get_data_dir()
+ENV_FILE = os.path.join(_DATA_DIR, ".env")
+TOKEN_FILE = os.path.join(_DATA_DIR, "youtube_token.json")
 
 YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
 GOOGLE_OAUTH_URL = "https://accounts.google.com/o/oauth2/auth"

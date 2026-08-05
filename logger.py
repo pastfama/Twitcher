@@ -3,8 +3,9 @@ import sys
 import threading
 from datetime import datetime
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(BASE_DIR, "watcher_debug.log")
+from paths import get_log_path
+
+LOG_FILE = get_log_path()
 
 _lock = threading.Lock()
 

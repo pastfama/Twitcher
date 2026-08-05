@@ -1,11 +1,38 @@
 """SullyGoose analytics widget — compact metric grid for the Current Watching panel.
 
-Modern dark-themed widget with uniform metric cells and score bars.
+Displays streamer performance data scraped from sullygnome.com by the
+``SullyGooseAPI`` and delivered through the ``AnalyticsEngine``.
 
-Size constants (codewide):
-- METRIC_CELL_HEIGHT: Height of each metric cell in the grid
-- SCORE_BAR_WIDTH/SCORE_BAR_HEIGHT: Size of score progress bars
-- PANEL_MIN_WIDTH: Minimum width for the SullyGoose panel
+Size Constants (exported from this module, used across the app):
+----------------------------------------------------------------
+METRIC_CELL_HEIGHT = 36   Height (px) of each MetricCell in the grid.
+SCORE_BAR_WIDTH    = 52   Width  (px) of each ScoreBar progress widget.
+SCORE_BAR_HEIGHT   = 32   Height (px) of each ScoreBar.
+PANEL_MIN_WIDTH    = 280  Minimum width for the entire SullyGoose panel.
+
+Architecture Notes:
+--------------------
+The widget is instantiated once by ``CurrentWatchingUIBuilder`` and stored
+as ``panel.sully_widget``.  It receives updates via::
+
+    panel.sully_widget.update_metrics(sully_data, analysis)
+
+The ``sully_data`` dict is the raw SullyGoose cache (keyed by metric
+names).  The optional ``analysis`` dict carries the composite score
+from ``AnalyticsEngine.calculate_score()``.
+
+Metric Grid Layout (3 rows × 6 columns):
+    Row 0:  AVG | PEAK | GRW  | RANK | FRQ  | DUR
+    Row 1:  START| END  | GAMES| MAIN | RAID | FOL
+    Row 2:  FGRW | CHAT | 7D   | 30D  | BEST | (empty)
+
+Score Bars (bottom row, 4 bars):
+    CONS  — consistency_score   (how regular the schedule is)
+    REL   — reliability_score   (how often the streamer goes live on time)
+    DISC  — discovery_score     (how discoverable in category browse)
+    QUAL  — composite quality   (from AnalyticsEngine, 0-100)
+
+When no data is available, all cells show "—" and score bars are zeroed.
 """
 
 from PySide6.QtCore import QRectF, QSize, Qt

@@ -20,8 +20,8 @@ class AccountManager:
 
     def __init__(self, env_file=None):
         if env_file is None:
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            env_file = os.path.join(base_dir, ".env")
+            from paths import get_data_dir
+            env_file = os.path.join(get_data_dir(), ".env")
         self.env_file = env_file
         self._load_env()
 

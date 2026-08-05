@@ -43,7 +43,16 @@ class SullyGooseAPIError(RuntimeError):
 class SullyGooseAPI:
     """Tokenless analytics client for sullygnome.com."""
 
-    def __init__(self, timeout=8, cache_ttl=300):
+    def __init__(self, timeout=8, cache_ttl=600):
+        """Initialize SullyGoose API client.
+
+        Args:
+            timeout: HTTP request timeout in seconds
+            cache_ttl: How long to cache results (seconds).  SullyGnome data
+                       is historical (30-day stats) and changes slowly, so
+                       10 minutes is a good default.  The AnalyticsEngine
+                       also maintains its own cache layer on top of this.
+        """
         self.timeout = timeout
         self.cache_ttl = cache_ttl
         self._cache = {}

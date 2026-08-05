@@ -12,9 +12,13 @@ from PySide6.QtWidgets import QWidget
 
 
 class ViewerHistoryGraph(QWidget):
-    """Sparkline showing the last ~30 viewer-count samples."""
+    """Sparkline showing the last ~60 viewer-count samples.
 
-    MAX_POINTS = 30
+    With the 2-second polling interval, 60 points = 2 minutes of history.
+    The graph provides a smooth, detailed view of viewer count trends.
+    """
+
+    MAX_POINTS = 60
 
     # --- theme colors ---
     _BG = "#0a0d18"

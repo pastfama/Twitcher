@@ -73,7 +73,6 @@ class CurrentWatchingUIBuilder:
 
     def _setup_panel(self):
         self.panel.setObjectName("CurrentCard")
-        self.panel.viewer_analysis = None
         self.panel.setMinimumHeight(140)
         self.panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 

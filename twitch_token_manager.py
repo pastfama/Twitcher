@@ -13,19 +13,18 @@ from twitch_api.config_loader import get_never_request_scopes
 # ============================================================
 
 
-BASE_DIR = os.path.dirname(
-    os.path.abspath(__file__)
-)
+from paths import get_data_dir
 
+_DATA_DIR = get_data_dir()
 
 ENV_FILE = os.path.join(
-    BASE_DIR,
+    _DATA_DIR,
     ".env"
 )
 
 
 TOKEN_FILE = os.path.join(
-    BASE_DIR,
+    _DATA_DIR,
     "twitch_token.json"
 )
 

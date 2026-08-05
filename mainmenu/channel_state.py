@@ -300,6 +300,9 @@ class MainMenuStreamState:
 
         self.current_stream = matching_stream
 
+        # Set current_channel early so ViewerMonitor guard works.
+        self.current_channel = last_streamer
+
         # Ensure the channel is in live_channels so ViewerMonitor tracks it.
         if matching_stream not in self.live_channels:
             self.live_channels.append(matching_stream)
@@ -415,33 +418,45 @@ class MainMenuStreamState:
 
 
     def update_current_stream_view(self, stream, analytics=None):
+        """Update the Currently Watching panel with fresh stream data.
 
+        Called by:
+          - ViewerMonitor (every 2s) with pre-computed analytics
+          - _on_analytics_signal when SullyGoose data arrives
+          - channel_selected / handle_stream_url_resolved for immediate display
+        """
         if not stream:
-
             self.current_panel.clear()
-
             return
 
+        # Guard: ignore updates for channels the user is NOT watching.
+        incoming_login = (
+            stream.get("user_login")
+            or stream.get("user_name")
+            or ""
+        ).lower().strip()
+        if self.current_channel and incoming_login != self.current_channel:
+            return
 
-        enriched_stream = self.enrich_stream_with_avatar(
-            stream
-        )
+        enriched_stream = self.enrich_stream_with_avatar(stream)
 
-        # Use analytics from viewer monitor if provided; otherwise compute it.
+        # ViewerMonitor already computed analytics on its background thread.
+        # Only recompute when called directly (e.g. channel_selected) without
+        # pre-computed analytics.  This eliminates a redundant update_stream()
+        # call that would re-run viewer_tracker.update_stream + collect_external_data.
         if analytics is None:
-            analysis = self.analytics_engine.update_stream(
-                enriched_stream
-            )
+            analysis = self.analytics_engine.update_stream(enriched_stream)
         else:
             analysis = analytics
 
-        # Ensure current_stream is set for analytics engine reference.
+        # Update cached stream for timer-based tick() refreshes.
         self.current_stream = enriched_stream
 
-        self.current_panel.set_stream(
-            enriched_stream,
-            analysis
-        )
+        # Emit fully-processed signal so panels can self-update.
+        self.state.stream_ready.emit(enriched_stream, analysis)
+
+        # Also call directly for backward compatibility.
+        self.current_panel.set_stream(enriched_stream, analysis)
 
 
 
@@ -450,6 +465,15 @@ class MainMenuStreamState:
         if not stream:
             return
 
+        # Set current_channel EARLY so ViewerMonitor's guard in
+        # update_current_stream_view knows which channel to accept data for.
+        channel_login = (
+            stream.get("user_login")
+            or stream.get("user_name")
+            or ""
+        ).lower().strip()
+        if channel_login:
+            self.current_channel = channel_login
 
         self.current_stream = stream
 

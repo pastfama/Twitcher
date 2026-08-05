@@ -39,6 +39,11 @@ class MainMenuWindowState:
         self.chat_panel = self.chat_panel_cls(access_token=get_valid_token() or "")
         self.dispatcher_panel = self.dispatcher_panel_cls()
 
+        # --- Connect StreamState signals for reactive panel updates ---
+        self.state.stream_ready.connect(self.current_panel.set_stream)
+        self.state.next_stream_changed.connect(self.next_panel.set_stream)
+        self.state.live_channels_changed.connect(self.live_followed_panel.set_streams)
+
         # --- 3-column grid: chat is full-height center column ---
         # Layout per user sketch (red=chat center, green=4 equal side panels):
         #   ┌──────────────┬────────────────┬──────────────┐

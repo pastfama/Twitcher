@@ -18,8 +18,9 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE_DIR, "watcher.db")
+from paths import get_db_path
+
+DB_PATH = get_db_path()
 
 _lock = threading.RLock()
 

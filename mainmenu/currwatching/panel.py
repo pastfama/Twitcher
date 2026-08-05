@@ -1,10 +1,13 @@
 """Current Watching panel — the card that shows what's playing right now.
 
-Business logic only.  All widget creation lives in
-:class:`~currwatching.ui.CurrentWatchingUIBuilder`; this class owns the
-state-update methods (:meth:`set_stream`, :meth:`clear`,
-:meth:`set_viewer_status`) and the async image-loading helpers that
-delegate to the shared :class:`~currwatching.image_cache.ImageCache`.
+Clean architecture with two update paths:
+- ``set_stream(stream, analysis)`` — full update (header, avatar, LCD, graph,
+  gauge, momentum, SullyGoose).  Called by ViewerMonitor when fresh data arrives.
+- ``tick()`` — lightweight 2s refresh (LCD, graph only).  Called by timer for
+  smooth viewer-count display between ViewerMonitor ticks.
+
+All widget creation lives in
+:class:`~currwatching.ui.CurrentWatchingUIBuilder`.
 """
 
 from datetime import datetime, timezone
@@ -17,257 +20,222 @@ from .theme import Theme
 from .image_cache import ImageCache
 from .ui import CurrentWatchingUIBuilder
 
-# Logger for currwatching module
 logger = logging.getLogger(__name__)
+
+# Momentum color map — defined once, reused everywhere.
+_MOMENTUM_COLORS = {
+    "Rising": "#00ff00",
+    "Declining": "#ff4444",
+}
+_DEFAULT_MOMENTUM_COLOR = "#f2f2f2"
+
+# Platform badge colors.
+_BADGE_COLORS = {
+    "twitch": "#9146FF",
+    "kick": "#53FC18",
+    "youtube": "#FF0000",
+}
 
 
 class CurrentWatchingPanel(QFrame):
-    """Card displaying the currently-watched stream: avatar, title,
-    viewer count, game, uptime, momentum, and SullyGoose analytics."""
+    """Card displaying the currently-watched stream.
 
-    #: Dimensions passed to ImageCache (matching Theme).
+    Data flow:
+        ViewerMonitor (2s) → update_current_stream_view() → set_stream()
+            → header, LCD, graph, gauge, momentum, SG  (all at once)
+
+        _momsg_timer (2s)  → tick()
+            → LCD + graph only  (lightweight, no SG recomputation)
+    """
+
     AVATAR_SIZE = (Theme.AVATAR_SIZE, Theme.AVATAR_SIZE)
     THUMBNAIL_SIZE = (Theme.THUMBNAIL_SIZE, Theme.THUMBNAIL_SIZE)
+
+    #: Write viewer history to DB every N ticks (8s at 2s intervals).
+    DB_WRITE_INTERVAL = 4
 
     def __init__(self):
         super().__init__()
         self.image_cache = ImageCache.shared()
-        self.viewer_analysis = None
+        self._refresh_tick_count = 0
+        self._last_sg_fingerprint = None
+        self._current_stream = None  # cached for tick()
+        self._current_analysis = None  # cached for tick()
         CurrentWatchingUIBuilder(self)
 
-    # ============================================================
-    # STREAM UPDATE
-    # ============================================================
+    # ================================================================
+    # FULL UPDATE — called by ViewerMonitor with fresh stream data
+    # ================================================================
 
     def set_stream(self, stream, analysis=None):
+        """Full panel update: header, LCD, graph, gauge, momentum, SG."""
         if not stream:
             self.clear()
             return
 
+        self._current_stream = stream
+        self._current_analysis = analysis
+
         # --- Header ---
-        channel = stream.get("user_name", "Unknown")
-        self.channel_label.setText(f"#{channel}")
+        self.channel_label.setText(f"#{stream.get('user_name', 'Unknown')}")
 
         # --- Platform badge ---
         platform = stream.get("platform", "twitch")
-        badge_colors = {
-            "twitch": "#9146FF",
-            "kick": "#53FC18",
-            "youtube": "#FF0000",
-        }
-        badge_color = badge_colors.get(platform, "#888888")
+        badge_color = _BADGE_COLORS.get(platform, "#888888")
         self.platform_label.setText(platform.upper())
         self.platform_label.setStyleSheet(
             f"color: {badge_color}; font-size: 8px; font-weight: bold;"
         )
 
-        # --- Viewer count + history graph ---
+        # --- Viewer count + graph ---
+        viewer_count = stream.get("viewer_count", 0)
+        self.enlarged_lcd_counter.display(viewer_count)
+        self.viewer_history_graph.add_point(viewer_count)
+        self.neon_viewer_counter.set_active(viewer_count > 0)
+
+        # --- Title ---
+        self.title_label.setText(stream.get("title", "—"))
+
+        # --- Avatar ---
+        self.set_avatar_image(stream.get("avatar_url"))
+
+        # --- Uptime + time labels ---
+        self._update_uptime(stream.get("started_at"))
+        self._update_time_labels()
+
+        # --- Momentum + gauge + SG (from analysis) ---
+        self._apply_analysis(analysis)
+
+    # ================================================================
+    # LIGHTWEIGHT TICK — called every 2s by timer for smooth LCD/graph
+    # ================================================================
+
+    def tick(self):
+        """Lightweight 2s refresh: graph + DB persist only.
+
+        The LCD is already updated by set_stream() (called every 2s by
+        ViewerMonitor).  This method only adds a graph data point and
+        persists viewer history to DB on a throttled schedule.
+        """
+        stream = self._current_stream
+        if not stream:
+            return
+
         viewer_count = stream.get("viewer_count", 0)
         self.viewer_history_graph.add_point(viewer_count)
 
-        # --- Update enlarged LCD counter with viewer count ---
-        self.enlarged_lcd_counter.display(viewer_count)
+        # Persist to DB every Nth tick (8s at 2s intervals).
+        self._refresh_tick_count += 1
+        if self._refresh_tick_count % self.DB_WRITE_INTERVAL == 0:
+            login = (
+                stream.get("user_login")
+                or stream.get("user_name")
+                or stream.get("channel")
+                or ""
+            ).lower().strip()
+            if login:
+                store_viewer_history(
+                    login,
+                    viewer_count,
+                    platform=stream.get("platform", "twitch"),
+                )
 
-        # --- Title ---
-        title = stream.get("title", "—")
-        self.title_label.setText(title)
+    # ================================================================
+    # MOMENTUM + GAUGE + SG — shared logic used by set_stream
+    # ================================================================
 
-        # --- Avatar ---
-        avatar_url = stream.get("avatar_url")
-        self.set_avatar_image(avatar_url)
-
-        # --- Neon viewer counter ---
-        self.neon_viewer_counter.set_active(viewer_count > 0)
-
-        # --- Uptime ---
-        started_at = stream.get("started_at")
-        self._update_uptime(started_at)
-        self._update_time_labels()
-
-        # --- Analytics ---
-        self.viewer_analysis = analysis
-        if analysis:
-            self.set_viewer_status(analysis)
-        else:
-            self.momentum_label.setText("📊 Waiting...")
-
-    # ============================================================
-    # VIEWER ANALYSIS UPDATE
-    # ============================================================
-
-    def set_viewer_status(self, analysis):
+    def _apply_analysis(self, analysis):
+        """Update momentum label, gauge, and SullyGoose widget from analysis."""
         if not analysis:
-            self.viewer_analysis = None
             self.momentum_label.setText("📊 Waiting...")
             return
-
-        self.viewer_analysis = analysis
 
         status = analysis.get("status", "")
         percent = analysis.get("percent") or 0
 
-        # Color-code momentum based on trend direction.
-        if status == "Rising":
-            color = "#00ff00"
-        elif status == "Declining":
-            color = "#ff4444"
-        else:
-            color = "#f2f2f2"
-        self.momentum_label.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: bold;")
-
+        # Momentum label — color-coded.
+        color = _MOMENTUM_COLORS.get(status, _DEFAULT_MOMENTUM_COLOR)
+        self.momentum_label.setStyleSheet(
+            f"color: {color}; font-size: 11px; font-weight: bold;"
+        )
         self.momentum_label.setText(f"{status} {percent:+.1f}%")
 
-        # Update mini gauge with momentum.
-        # Map percent (-50 to +50) to gauge scale (0 to 100).
-        gauge_value = int(percent + 50)  # -50→0, 0→50, +50→100
-        gauge_value = max(0, min(100, gauge_value))
-        self.mini_gauge.set_value(gauge_value, "MOM")
+        # Gauge — map percent (-50..+50) to gauge (0..100).
+        self.mini_gauge.set_value(
+            max(0, min(100, int(percent + 50))), "MOM"
+        )
 
-        # Update SullyGoose widget directly.
-        sully = analysis.get("sullygoose", {})
-        if hasattr(self, 'sully_widget') and self.sully_widget:
-            self.sully_widget.update_metrics(sully, analysis)
+        # SullyGoose — only update when data actually changed.
+        sully = analysis.get("sullygoose") or {}
+        if hasattr(self, "sully_widget") and self.sully_widget:
+            fingerprint = sully.get("viewer_growth")
+            if fingerprint != self._last_sg_fingerprint:
+                self._last_sg_fingerprint = fingerprint
+                self.sully_widget.update_metrics(sully, analysis)
 
-    def _clear_sullygoose(self):
-        """Reset SullyGoose widget to placeholder state."""
-        if hasattr(self, 'sully_widget') and self.sully_widget:
-            self.sully_widget.update_metrics(None)
-
-    # ============================================================
+    # ================================================================
     # CLEAR
-    # ============================================================
+    # ================================================================
 
     def clear(self):
+        """Reset all widgets to placeholder state."""
+        self._current_stream = None
+        self._current_analysis = None
+        self._last_sg_fingerprint = None
+
         self.channel_label.setText("—")
         self.enlarged_lcd_counter.display(0)
         self.title_label.setText("—")
         self.momentum_label.setText("📊 Waiting...")
-        self._clear_sullygoose()
         self.set_avatar_image(None)
         self.neon_viewer_counter.set_active(False)
 
-    # ============================================================
-    # IMAGE LOADING (async via ImageCache)
-    # ============================================================
+        if hasattr(self, "sully_widget") and self.sully_widget:
+            self.sully_widget.update_metrics(None)
+
+    # ================================================================
+    # IMAGE LOADING
+    # ================================================================
 
     def set_avatar_image(self, avatar_url):
-        """Load the broadcaster avatar asynchronously; show '?' until ready."""
+        """Load broadcaster avatar asynchronously; '?' until ready."""
         self.image_cache.load(
-            self.avatar_label,
-            avatar_url,
-            self.AVATAR_SIZE,
-            placeholder="?",
+            self.avatar_label, avatar_url,
+            self.AVATAR_SIZE, placeholder="?",
         )
 
     def set_game_thumbnail(self, thumbnail_url):
-        """Load the game-category thumbnail asynchronously; show '🎮' until ready."""
+        """Load game thumbnail asynchronously; '🎮' until ready."""
         self.image_cache.load(
-            self.game_thumbnail,
-            thumbnail_url,
-            self.THUMBNAIL_SIZE,
-            placeholder="🎮",
+            self.game_thumbnail, thumbnail_url,
+            self.THUMBNAIL_SIZE, placeholder="🎮",
         )
 
-    # ============================================================
-    # TIME LABELS
-    # ============================================================
+    # ================================================================
+    # TIME + UPTIME
+    # ================================================================
 
     def _update_time_labels(self):
-        """Update streamer time, my time, and uptime labels."""
-        # Get current time in UTC
         now_utc = datetime.now(timezone.utc)
-        now_local = datetime.now()  # Local time for user
-        
-        # Format times as HH:MM
-        streamer_time_str = now_utc.strftime("%H:%M") + " UTC"
-        my_time_str = now_local.strftime("%H:%M") + " LOCAL"
-        
-        # Update the labels
-        self.streamer_time_label.setText(f"⏰ Streamer: {streamer_time_str}")
-        self.my_time_label.setText(f"⏰ Me: {my_time_str}")
-
-    # ============================================================
-    # UPTIME
-    # ============================================================
+        now_local = datetime.now()
+        self.streamer_time_label.setText(
+            f"⏰ Streamer: {now_utc.strftime('%H:%M')} UTC"
+        )
+        self.my_time_label.setText(
+            f"⏰ Me: {now_local.strftime('%H:%M')} LOCAL"
+        )
 
     def _update_uptime(self, started_at):
         if not started_at:
             self.uptime_label.setText("⏱ —")
             return
-
         try:
             started = datetime.fromisoformat(
                 started_at.replace("Z", "+00:00")
             )
-            seconds = int(
-                (datetime.now(timezone.utc) - started).total_seconds()
+            seconds = int((datetime.now(timezone.utc) - started).total_seconds())
+            self.uptime_label.setText(
+                f"⏱ {seconds // 3600}h {(seconds % 3600) // 60}m"
             )
-            hours = seconds // 3600
-            minutes = (seconds % 3600) // 60
-            self.uptime_label.setText(f"⏱ {hours}h {minutes}m")
         except Exception:
             self.uptime_label.setText("⏱ —")
-
-    # ============================================================
-    # TIMEBOSS REFRESH (every 4 seconds)
-    # ============================================================
-
-    def refresh_momsg(self, stream, analysis):
-        """Refresh MOM and SG widgets every 4 seconds via timer.
-        
-        Updates:
-        - MOM gauge (momentum), LCD (viewer count), graph (history)
-        - SG metrics that change frequently
-        
-        Also persists viewer history to DB.
-        """
-        if not stream:
-            return
-
-        # Get current data
-        viewer_count = stream.get("viewer_count", 0)
-        login = (
-            stream.get("user_login")
-            or stream.get("user_name")
-            or stream.get("channel")
-            or ""
-        ).lower().strip()
-
-        # Update LCD counter
-        self.enlarged_lcd_counter.display(viewer_count)
-
-        # Add point to viewer history graph
-        self.viewer_history_graph.add_point(viewer_count)
-
-        # Persist viewer history to DB
-        if login:
-            store_viewer_history(
-                login,
-                viewer_count,
-                platform=stream.get("platform", "twitch")
-            )
-
-        # Update momentum label and gauge from analysis
-        if analysis:
-            status = analysis.get("status", "")
-            percent = analysis.get("percent") or 0
-
-            # Color-code momentum based on trend direction.
-            if status == "Rising":
-                color = "#00ff00"
-            elif status == "Declining":
-                color = "#ff4444"
-            else:
-                color = "#f2f2f2"
-            self.momentum_label.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: bold;")
-
-            self.momentum_label.setText(f"{status} {percent:+.1f}%")
-
-            # Update gauge
-            gauge_value = max(0, min(100, int(percent + 50)))
-            self.mini_gauge.set_value(gauge_value, "MOM")
-
-            # Update SullyGoose widget
-            sully = analysis.get("sullygoose", {})
-            if hasattr(self, 'sully_widget') and self.sully_widget:
-                self.sully_widget.update_metrics(sully, analysis)

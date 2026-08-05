@@ -104,7 +104,10 @@ class ImageCache:
 
     @staticmethod
     def _show_placeholder(label, text):
-        label.setPixmap(None)  # clear any existing pixmap
+        """Clear any existing pixmap and show placeholder text."""
+        # PySide6 does not accept None for setPixmap — use an empty QPixmap.
+        from PySide6.QtGui import QPixmap
+        label.setPixmap(QPixmap())
         label.setText(text)
 
     def _discard(self, url):
