@@ -32,7 +32,7 @@ $releaseNotes = @"
 - 10 bug fixes (raid crash, EventSub protocol, DB collisions, etc.)
 
 ### Bundled VLC
-- VLC runtime (libvlc.dll + plugins) is now embedded — no VLC install needed
+- VLC runtime (libvlc.dll + plugins) is now embedded - no VLC install needed
 
 ### Requirements
 - Windows 10/11
