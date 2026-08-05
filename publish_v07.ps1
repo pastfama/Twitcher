@@ -60,7 +60,7 @@ $releaseNotes = @"
 - VLC media player installed
 
 ### Install
-Download Twitcher.exe below and double-click to run.
+Download Watcher.exe below and double-click to run.
 "@
 $relBody = @{
     tag_name = "v0.7"
@@ -78,12 +78,12 @@ try {
     Write-Host "[OK] Using existing release: $($rel.html_url)"
 }
 
-# --- Upload Twitcher.exe asset ---
-$exePath = Join-Path $root "dist\Twitcher.exe"
+# --- Upload Watcher.exe asset ---
+$exePath = Join-Path $root "dist\Watcher.exe"
 if (-not (Test-Path $exePath)) { Write-Host "ERROR: $exePath not found"; exit 1 }
-Write-Host "`n[Upload] Attaching Twitcher.exe ($([math]::Round((Get-Item $exePath).Length/1MB,1)) MB)..."
-$uploadUrl = ($rel.upload_url -replace "{.*}", "") + "?name=Twitcher.exe"
-$uploadResult = curl.exe -s -L -H "Authorization: token $token" -H "Content-Type: application/octet-stream" --data-binary "@dist/Twitcher.exe" $uploadUrl
+Write-Host "`n[Upload] Attaching Watcher.exe ($([math]::Round((Get-Item $exePath).Length/1MB,1)) MB)..."
+$uploadUrl = ($rel.upload_url -replace "{.*}", "") + "?name=Watcher.exe"
+$uploadResult = curl.exe -s -L -H "Authorization: token $token" -H "Content-Type: application/octet-stream" --data-binary "@dist/Watcher.exe" $uploadUrl
 if ($uploadResult -match '"browser_download_url"\s*:\s*"([^"]+)"') {
     Write-Host "[OK] Asset uploaded: $($Matches[1])"
 } else {
