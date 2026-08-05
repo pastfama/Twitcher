@@ -1,6 +1,7 @@
 .env
 twitch_token.json
 twitcher.db
+watcher.db
 twitcher_debug.log
 twitcher_run.log
 
