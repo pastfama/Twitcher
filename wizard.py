@@ -22,7 +22,11 @@ from PySide6.QtWidgets import (
 from logger import debug
 
 APP_ORGANIZATION = "Watcher"
-APP_NAME = "WatcherControlCenter"
+APP_NAME = "Watcher Control Center"
+
+# Version-scoped flag so the wizard reliably shows for this release
+# even if a stale flag exists from an earlier run or version.
+WIZARD_FLAG_KEY = "first_run_wizard_shown_v071"
 
 # Platform brand colors used in the poster.
 PLATFORM_COLORS = {
@@ -211,14 +215,14 @@ def should_show_wizard():
     """Return True if the first-run wizard has not been shown yet."""
     from PySide6.QtCore import QSettings
     settings = QSettings(APP_ORGANIZATION, APP_NAME)
-    return not settings.value("first_run_wizard_shown", False, type=bool)
+    return not settings.value(WIZARD_FLAG_KEY, False, type=bool)
 
 
 def mark_wizard_shown():
     """Persist that the first-run wizard has been shown."""
     from PySide6.QtCore import QSettings
     settings = QSettings(APP_ORGANIZATION, APP_NAME)
-    settings.setValue("first_run_wizard_shown", True)
+    settings.setValue(WIZARD_FLAG_KEY, True)
     settings.sync()
 
 
