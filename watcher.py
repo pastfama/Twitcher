@@ -290,6 +290,16 @@ def main():
     app = create_application()
 
     # --------------------------------------------------------
+    # FIRST-RUN WIZARD (poster + install folder confirmation)
+    # --------------------------------------------------------
+
+    try:
+        from wizard import run_first_run_wizard
+        run_first_run_wizard()
+    except Exception as exc:
+        print(f"[WIZARD] Could not show first-run wizard: {exc}")
+
+    # --------------------------------------------------------
     # MONITORS
     # --------------------------------------------------------
 
