@@ -101,12 +101,30 @@ class AccountManager:
         }
 
     def is_kick_configured(self) -> bool:
-        """Check if Kick credentials are configured."""
+        """Check if Kick is available.
+
+        Kick's public API works without authentication, so this
+        returns True when OAuth credentials exist, a valid token
+        is stored, or the public API is reachable.
+        """
         try:
             from kick_token_manager import KickTokenManager
-            return KickTokenManager.get_valid_token() is not None or True  # Public API works without auth
+            has_token = KickTokenManager.get_valid_token() is not None
         except Exception:
+            has_token = False
+        has_oauth_creds = bool(os.getenv("KICK_CLIENT_ID", "").strip())
+        if has_token or has_oauth_creds:
             return True
+        # Public API requires no auth — verify it is reachable.
+        try:
+            import requests
+            response = requests.get(
+                "https://kick.com/api/v2/channels/xqc",
+                timeout=5,
+            )
+            return response.status_code == 200
+        except Exception:
+            return False
 
     def login_kick(self):
         """Start Kick OAuth flow in browser."""

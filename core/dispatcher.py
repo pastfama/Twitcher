@@ -189,6 +189,8 @@ class StreamDispatcher:
 
         url,
 
+        platform="twitch",
+
     ):
 
         return {
@@ -196,6 +198,8 @@ class StreamDispatcher:
             "streamer": streamer,
 
             "url": url,
+
+            "platform": platform,
 
             "timestamp": time.time(),
 
@@ -214,6 +218,8 @@ class StreamDispatcher:
         url,
 
         announce=False,
+
+        platform="twitch",
 
     ):
 
@@ -319,8 +325,8 @@ class StreamDispatcher:
             # RECORD HISTORY (auth-independent)
             # ------------------------------------------------
 
-            save_channel(streamer)
-            debug(f"[DISPATCHER] Recorded channel '{streamer}' in history")
+            save_channel(streamer, platform=platform)
+            debug(f"[DISPATCHER] Recorded channel '{streamer}' ({platform}) in history")
 
             # ------------------------------------------------
             # UPDATE STATE
@@ -339,6 +345,8 @@ class StreamDispatcher:
                 streamer,
 
                 url,
+
+                platform,
 
             )
 

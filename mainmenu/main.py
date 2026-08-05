@@ -272,10 +272,11 @@ class MainMenu(
                 login = entry.get("login")
                 if not login:
                     continue
-                full = get_streamer(login)
+                platform = entry.get("platform", "twitch")
+                full = get_streamer(login, platform=platform)
                 avatar = full.get("avatar_url")
                 if avatar:
-                    self.avatar_cache[login] = avatar
+                    self.avatar_cache[f"{platform}:{login}"] = avatar
                 count += 1
             self.log(f"Loaded cached data for {count} streamers from DB")
         except Exception as exc:
@@ -293,6 +294,7 @@ class MainMenu(
         login = str(
             stream_data.get("user_login")
             or stream_data.get("user_name")
+            or stream_data.get("channel")
             or ""
         ).strip()
 
@@ -301,38 +303,50 @@ class MainMenu(
             return stream_data
 
 
-        if login in self.avatar_cache:
+        platform = str(
+            stream_data.get("platform")
+            or "twitch"
+        ).lower().strip()
 
-            stream_data["avatar_url"] = self.avatar_cache[login]
-
-            return stream_data
-
-
-        try:
-
-            profile = self.api.get_user_profile(
-                login
-            )
+        cache_key = f"{platform}:{login}"
 
 
-        except Exception as exc:
+        if cache_key in self.avatar_cache:
 
-            self.log(
-                f"Could not fetch avatar for {login}: {exc}"
-            )
+            stream_data["avatar_url"] = self.avatar_cache[cache_key]
 
             return stream_data
 
 
+        # Kick and YouTube streams already carry their avatar URL.
         avatar_url = str(
-            profile.get("profile_image_url")
+            stream_data.get("avatar_url")
             or ""
         ).strip()
+
+        if not avatar_url and platform == "twitch":
+
+            try:
+
+                profile = self.api.get_user_profile(
+                    login
+                )
+
+                avatar_url = str(
+                    profile.get("profile_image_url")
+                    or ""
+                ).strip()
+
+            except Exception as exc:
+
+                self.log(
+                    f"Could not fetch avatar for {login}: {exc}"
+                )
 
 
         if avatar_url:
 
-            self.avatar_cache[login] = avatar_url
+            self.avatar_cache[cache_key] = avatar_url
 
             stream_data["avatar_url"] = avatar_url
 
@@ -369,6 +383,12 @@ class MainMenu(
             return
 
 
+        platform = data.get(
+            "platform",
+            "twitch"
+        )
+
+
         self.current_channel = (
             channel.lower().strip()
         )
@@ -376,7 +396,8 @@ class MainMenu(
 
         self.current_stream = {
             "user_login": self.current_channel,
-            "user_name": self.current_channel
+            "user_name": self.current_channel,
+            "platform": platform
         }
 
 

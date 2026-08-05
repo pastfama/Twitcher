@@ -63,6 +63,12 @@ class NextStreamPanel(QFrame):
         self.next_channel_label.setFont(QFont(Theme.FAMILY, 13, QFont.Weight.Bold))
         self.next_channel_label.setStyleSheet(f"color: {Theme.TEXT_PRIMARY};")
         channel_row.addWidget(self.next_channel_label, 1)
+
+        self.next_platform_label = QLabel("")
+        self.next_platform_label.setStyleSheet(
+            "color: #888888; font-size: 8px; font-weight: bold;"
+        )
+        channel_row.addWidget(self.next_platform_label)
         layout.addLayout(channel_row)
 
         # --- Viewers + trend row ---
@@ -138,6 +144,20 @@ class NextStreamPanel(QFrame):
 
         self._current_channel = stream.get("user_login") or channel.lower()
         self.next_channel_label.setText(channel)
+
+        # --- Platform badge ---
+        platform = stream.get("platform", "twitch")
+        badge_colors = {
+            "twitch": "#9146FF",
+            "kick": "#53FC18",
+            "youtube": "#FF0000",
+        }
+        badge_color = badge_colors.get(platform, "#888888")
+        self.next_platform_label.setText(platform.upper())
+        self.next_platform_label.setStyleSheet(
+            f"color: {badge_color}; font-size: 8px; font-weight: bold;"
+        )
+
         self.next_viewers_label.setText(f"  {viewers:,} viewers")
         self.next_category_label.setText(category)
         self.next_reason_label.setText(
@@ -162,6 +182,7 @@ class NextStreamPanel(QFrame):
     def clear(self):
         self._current_channel = None
         self.next_channel_label.setText("--")
+        self.next_platform_label.setText("")
         self.next_viewers_label.setText("--")
         self.next_trend_label.setText("")
         self.next_category_label.setText("--")

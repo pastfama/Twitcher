@@ -77,10 +77,11 @@ class AnalyticsEngine:
             cached_channels = list_sg_channels()
             for entry in cached_channels:
                 login = entry.get("login")
+                platform = entry.get("platform", "twitch")
                 if login:
-                    data = get_sg(login)
+                    data = get_sg(login, platform=platform)
                     if data:
-                        self._sully_cache[login] = data
+                        self._sully_cache[f"{platform}:{login}"] = data
             debug(f"[ANALYTICS] Loaded {len(cached_channels)} channels from DB")
 
     def update_stream(
@@ -276,7 +277,7 @@ class AnalyticsEngine:
                     with self._cache_lock:
                         self._sully_cache[fetch_key] = stats
                     # Save to database for next startup.
-                    store_sg(login, stats)
+                    store_sg(login, stats, platform=platform)
                     debug(f"[ANALYTICS] Stored SullyGoose data for '{login}' ({platform}): {len(stats)} metrics")
                     # Always notify UI — let the UI decide whether to use it.
                     if self._on_analytics_updated:
@@ -344,8 +345,9 @@ class AnalyticsEngine:
                 or stream.get("channel")
                 or ""
             ).lower()
+            platform = stream.get("platform", "twitch")
             if login:
-                self._ensure_async_fetch(login)
+                self._ensure_async_fetch(login, platform=platform)
 
     # ========================================================
     # STREAM QUALITY SCORE

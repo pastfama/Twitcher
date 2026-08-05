@@ -31,6 +31,7 @@ class MainMenuWindowState:
         # Wire the new LiveFollowedPanel signals.
         self.live_followed_panel.channel_selected.connect(self.channel_selected)
         self.live_followed_panel.watch_requested.connect(self.watch_selected)
+        self.live_followed_panel.watchlist_changed.connect(self._on_watchlist_changed)
         # Inject dependencies the new panel needs for analytics/avatars.
         self.live_followed_panel.set_api(self.api)
         self.live_followed_panel.set_viewer_tracker(self.viewer_tracker)
@@ -134,6 +135,18 @@ class MainMenuWindowState:
             delete_setting("last_streamer")
         except Exception:
             pass
+
+    def _on_watchlist_changed(self):
+        """Refresh live channels when the watchlist is modified."""
+        if getattr(self, "is_closing", False):
+            return
+        try:
+            if self.user:
+                self.load_live_channels()
+            else:
+                self.log("Watchlist updated; connect to refresh live channels.")
+        except Exception as exc:
+            self.log(f"Could not refresh after watchlist change: {exc}")
 
     def move_to_secondary_monitor(self):
         screens = QApplication.screens()

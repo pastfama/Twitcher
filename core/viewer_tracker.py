@@ -6,6 +6,9 @@ class ViewerTracker:
     """
     Tracks viewer count changes for multiple channels
     and calculates stream momentum.
+
+    Channels are keyed by ``(platform, channel)`` so the same
+    channel name on different platforms does not collide.
     """
 
     def __init__(self, max_history=20):
@@ -15,18 +18,25 @@ class ViewerTracker:
         self.channels = {}
 
 
+    def _key(self, stream):
+        """Return a (platform, channel) key for a stream dict."""
+        platform = str(stream.get("platform") or "twitch").lower().strip()
+        channel = (
+            stream.get("user_login")
+            or stream.get("user_name")
+            or stream.get("channel")
+            or ""
+        ).lower().strip()
+        return platform, channel
+
+
     def update_stream(self, stream):
 
         if not stream:
             return None
 
 
-        channel = (
-            stream.get("user_login")
-            or stream.get("user_name")
-            or ""
-        ).lower()
-
+        platform, channel = self._key(stream)
 
         if not channel:
             return None
@@ -40,14 +50,14 @@ class ViewerTracker:
         )
 
 
-        if channel not in self.channels:
+        if (platform, channel) not in self.channels:
 
-            self.channels[channel] = deque(
+            self.channels[(platform, channel)] = deque(
                 maxlen=self.max_history
             )
 
 
-        self.channels[channel].append(
+        self.channels[(platform, channel)].append(
             {
                 "time": datetime.now(),
                 "viewers": viewers
@@ -56,14 +66,15 @@ class ViewerTracker:
 
 
         return self.analyze(
+            platform,
             channel
         )
 
 
-    def analyze(self, channel):
+    def analyze(self, platform, channel):
 
         history = self.channels.get(
-            channel
+            (platform, channel)
         )
 
 
@@ -76,6 +87,7 @@ class ViewerTracker:
 
             return {
                 "channel": channel,
+                "platform": platform,
                 "status": "warming up",
                 "change": 0,
                 "percent": 0,
@@ -91,6 +103,7 @@ class ViewerTracker:
 
             return {
                 "channel": channel,
+                "platform": platform,
                 "status": "stable",
                 "change": 0,
                 "percent": 0,
@@ -128,6 +141,7 @@ class ViewerTracker:
 
         return {
             "channel": channel,
+            "platform": platform,
             "status": status,
             "change": change,
             "percent": round(percent, 1),
@@ -135,11 +149,12 @@ class ViewerTracker:
         }
 
 
-    def get_channel_stats(self, channel):
+    def get_channel_stats(self, channel, platform="twitch"):
 
         channel = channel.lower()
 
         return self.analyze(
+            platform,
             channel
         )
 
@@ -148,9 +163,10 @@ class ViewerTracker:
 
         stats = {}
 
-        for channel in self.channels:
+        for (platform, channel) in self.channels:
 
-            stats[channel] = self.analyze(
+            stats[f"{platform}:{channel}"] = self.analyze(
+                platform,
                 channel
             )
 
@@ -163,7 +179,7 @@ class ViewerTracker:
         best_viewers = 0
 
 
-        for channel, history in self.channels.items():
+        for (platform, channel), history in self.channels.items():
 
             if not history:
                 continue
@@ -175,7 +191,7 @@ class ViewerTracker:
             if viewers > best_viewers:
 
                 best_viewers = viewers
-                best = channel
+                best = (platform, channel)
 
 
         return best

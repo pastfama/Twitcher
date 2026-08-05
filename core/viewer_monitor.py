@@ -1,5 +1,8 @@
-"""Periodic live-channel monitor.  All Twitch API calls run on the
+"""Periodic live-channel monitor.  All API calls run on the
 QThreadPool so the GUI thread never blocks.
+
+Supports all platforms (Twitch, Kick, YouTube) by routing each
+channel through the platform manager based on its ``platform`` field.
 """
 
 from PySide6.QtCore import QObject, QTimer
@@ -70,6 +73,7 @@ class ViewerMonitor(QObject):
                     if isinstance(channel, str):
 
                         login = channel
+                        platform = "twitch"
 
                     else:
 
@@ -80,11 +84,16 @@ class ViewerMonitor(QObject):
                             or channel.get("broadcaster_login")
                         )
 
+                        platform = (
+                            channel.get("platform")
+                            or "twitch"
+                        )
+
                     if not login:
                         continue
 
                     run_in_background(
-                        lambda login=login: self._check_channel(login),
+                        lambda login=login, platform=platform: self._check_channel(login, platform),
                         lambda result, login=login: self._on_channel_checked(login, result),
                         lambda message, login=login: self._on_channel_error(login, message),
                     )
@@ -97,10 +106,10 @@ class ViewerMonitor(QObject):
 
             debug(f"[VIEWER MONITOR ERROR] {exc}")
 
-    def _check_channel(self, login):
+    def _check_channel(self, login, platform="twitch"):
         """Runs on a thread-pool thread.  Returns (stream, analytics)."""
 
-        stream = self.api.get_stream_info(login)
+        stream = self._get_stream_info(login, platform)
 
         if not stream:
             return None
@@ -113,6 +122,23 @@ class ViewerMonitor(QObject):
             analytics = self.tracker.update_stream(stream)
 
         return stream, analytics
+
+    def _get_stream_info(self, login, platform):
+        """Fetch stream info for the correct platform.
+
+        Twitch uses the main Twitch API client; Kick and YouTube use
+        the unified platform manager.
+        """
+        try:
+            if platform == "twitch":
+                return self.api.get_stream_info(login)
+
+            from platforms import get_platform_manager
+            pm = get_platform_manager()
+            return pm.get_stream_info(platform, login)
+        except Exception as exc:
+            debug(f"[VIEWER MONITOR] {platform}/{login} fetch error: {exc}")
+            return None
 
     def _on_channel_checked(self, login, result):
         """Delivered on the GUI thread with the worker's result."""

@@ -15,14 +15,9 @@ class MainMenuRaidRuntime:
 
         if self.current_channel:
 
-            switched = self.dispatcher.switch_stream(
-                streamer=self.current_channel,
-                url=None,
-                announce=False,
-                raid={
-                    "from": from_streamer,
-                    "to": to_streamer,
-                }
+            switched = self.dispatcher.handle_raid(
+                from_streamer=from_streamer,
+                to_streamer=to_streamer,
             )
 
             if switched:

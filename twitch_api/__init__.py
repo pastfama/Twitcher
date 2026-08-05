@@ -87,7 +87,7 @@ class TwitchAPI(TwitchAPIBase):
             return self._adapter.get_user_access_token(
                 user_id=user_id, force_verify=force_verify
             )
-        return AuthMixin.get_user_access_token(self, user_id, force_verify)
+        return AuthMixin.get_user_access_token(self)
 
     def refresh_user_token(self, refresh_token):
         if self._adapter:

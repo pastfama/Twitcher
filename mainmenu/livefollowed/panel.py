@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
+    QComboBox,
 )
 
 from core import run_in_background
@@ -24,6 +26,7 @@ class LiveFollowedPanel(QGroupBox):
 
     channel_selected = Signal(object)
     watch_requested = Signal(str)
+    watchlist_changed = Signal()
 
     def __init__(self, api=None, analytics_engine=None):
         debug("LiveFollowedPanel.__init__ called")
@@ -43,6 +46,67 @@ class LiveFollowedPanel(QGroupBox):
         layout.setSpacing(4)
 
         self.setMinimumHeight(380)
+
+        # --- Add-to-watchlist bar (platform equality) ---
+        add_row = QHBoxLayout()
+        add_row.setSpacing(4)
+
+        self.add_platform_combo = QComboBox()
+        self.add_platform_combo.addItem("Twitch", "twitch")
+        self.add_platform_combo.addItem("Kick", "kick")
+        self.add_platform_combo.addItem("YouTube", "youtube")
+        self.add_platform_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {Theme.DARK_PANEL};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.SECTION_BORDER};
+                border-radius: 4px;
+                padding: 4px 6px;
+                font-size: 11px;
+            }}
+        """)
+        self.add_platform_combo.setFixedWidth(80)
+        add_row.addWidget(self.add_platform_combo)
+
+        self.add_channel_input = QLineEdit()
+        self.add_channel_input.setPlaceholderText("Add channel (e.g. xqc, @handle)...")
+        self.add_channel_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {Theme.DARK_PANEL};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.SECTION_BORDER};
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-size: 11px;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {Theme.CYAN};
+            }}
+        """)
+        self.add_channel_input.returnPressed.connect(self._on_add_channel)
+        add_row.addWidget(self.add_channel_input, 1)
+
+        self.add_button = QPushButton("+")
+        self.add_button.setToolTip("Add channel to watchlist")
+        self.add_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.AVATAR_BG};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.SECTION_BORDER};
+                border-radius: 4px;
+                padding: 4px 10px;
+                font-size: 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.CYAN};
+                color: #000000;
+            }}
+        """)
+        self.add_button.clicked.connect(self._on_add_channel)
+        add_row.addWidget(self.add_button)
+
+        layout.addLayout(add_row)
 
         # --- Search/filter bar ---
         self.search_input = QLineEdit()
@@ -114,6 +178,32 @@ class LiveFollowedPanel(QGroupBox):
 
     def set_analytics_engine(self, analytics):
         self._analytics = analytics
+
+    def _on_add_channel(self):
+        """Add a channel to the watchlist for the selected platform."""
+        from platforms import strip_platform_prefix, detect_platform
+        from core.db import add_to_watchlist
+
+        platform = self.add_platform_combo.currentData() or "twitch"
+        raw = self.add_channel_input.text().strip()
+        if not raw:
+            return
+
+        # Support explicit prefix syntax too: "kick:xqc", "yt:@handle"
+        detected = detect_platform(raw)
+        if detected != "twitch" or ":" in raw:
+            platform = detected
+        channel = strip_platform_prefix(raw).lstrip("#").lower()
+
+        if not channel:
+            return
+
+        add_to_watchlist(platform, channel)
+        debug(f"[WATCHLIST] Added {platform}:{channel}")
+        self.add_channel_input.clear()
+
+        # Notify the main window so it can refresh live channels.
+        self.watchlist_changed.emit()
 
     def _on_search_changed(self, text):
         text = text.strip().lower()
@@ -208,6 +298,26 @@ class LiveFollowedPanel(QGroupBox):
         """)
         layout.addWidget(avatar_label)
 
+        # --- Platform badge ---
+        platform = stream.get("platform", "twitch")
+        badge_colors = {
+            "twitch": "#9146FF",
+            "kick": "#53FC18",
+            "youtube": "#FF0000",
+        }
+        badge_color = badge_colors.get(platform, "#888888")
+        badge_label = QLabel(platform.upper())
+        badge_label.setStyleSheet(f"""
+            color: {badge_color};
+            font-size: 8px;
+            font-weight: bold;
+            border: 1px solid {badge_color};
+            border-radius: 3px;
+            padding: 1px 4px;
+        """)
+        badge_label.setFixedWidth(52)
+        layout.addWidget(badge_label)
+
         # --- Channel name ---
         name_label = QLabel(str(name))
         name_label.setFont(QFont(Theme.FAMILY, 11, QFont.Weight.Bold))
@@ -229,7 +339,10 @@ class LiveFollowedPanel(QGroupBox):
         # --- Growth ---
         growth_parts = []
         if self._tracker and login:
-            stats = self._tracker.get_channel_stats(login)
+            stats = self._tracker.get_channel_stats(
+                login,
+                platform=stream.get("platform", "twitch")
+            )
             if stats:
                 percent = stats.get("percent") or 0
                 growth_parts.append(f"{percent:+.1f}%")

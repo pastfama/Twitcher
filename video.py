@@ -726,19 +726,38 @@ class VideoWindow(QWidget):
             pass
         return None
 
-    def start_channel(self, channel):
+    def start_channel(self, channel, platform=None):
         """Resolve and play *channel* with no Twitch auth (streamlink).
 
         Records the channel in the last-10 history text file.
+
+        Args:
+            channel: Channel name, URL, or a dict with 'channel'/'platform'.
+            platform: Optional platform name (twitch, kick, youtube).
         """
+        if isinstance(channel, dict):
+            platform = channel.get("platform") or platform
+            channel = channel.get("channel") or channel.get("login") or ""
+
         channel = str(channel or "").strip().lstrip("#").lower()
         if not channel:
             debug("[VIDEO] start_channel called with empty channel")
             return False
 
-        debug(f"[VIDEO] Resolving channel '{channel}' (auth-free)...")
+        if not platform:
+            from platforms import detect_platform
+            platform = detect_platform(channel)
+
+        # Strip explicit platform prefixes ("kick:xqc" -> "xqc").
+        from platforms import strip_platform_prefix
+        channel = strip_platform_prefix(channel).lstrip("#").lower()
+        if not channel:
+            debug("[VIDEO] start_channel called with empty channel after prefix strip")
+            return False
+
+        debug(f"[VIDEO] Resolving channel '{channel}' ({platform}) (auth-free)...")
         try:
-            url = resolve_stream_url(channel)
+            url = resolve_stream_url(channel, platform_name=platform)
         except StreamResolverError as exc:
             self.set_status("\u25cf NO STREAM", "#e66f7a")
             debug(f"[VIDEO] Could not resolve '{channel}': {exc}")
@@ -749,7 +768,7 @@ class VideoWindow(QWidget):
             self.current_channel = channel
             self.recent_channels = load_channels()
             self.setWindowTitle(f"WATCHER // {channel}")
-            debug(f"[VIDEO] Now playing '{channel}' (auth-free)")
+            debug(f"[VIDEO] Now playing '{channel}' ({platform}) (auth-free)")
         return ok
 
     def play_last_channels(self):

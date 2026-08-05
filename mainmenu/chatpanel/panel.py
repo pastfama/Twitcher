@@ -114,6 +114,24 @@ class ChatPanel(QGroupBox):
             background-color: {Theme.DARK_PANEL};
         """)
 
+    def show_platform_unavailable(self, platform):
+        """Show a graceful 'chat unavailable' state for non-Twitch platforms."""
+        debug(f"ChatPanel.show_platform_unavailable called for {platform}")
+        self.channel_info_label.setText(f"{platform.upper()} chat unavailable")
+        self.connection_dot.setText("N/A")
+        self.connection_dot.setStyleSheet(f"""
+            color: {Theme.DIM};
+            font-size: 9px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background-color: {Theme.DARK_PANEL};
+        """)
+        try:
+            self.chat_widget.disconnect()
+        except Exception:
+            pass
+
     def disconnect_chat(self):
         debug("ChatPanel.disconnect_chat called")
         self.connection_dot.setText("OFFLINE")

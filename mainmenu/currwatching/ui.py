@@ -104,11 +104,16 @@ class CurrentWatchingUIBuilder:
         self.panel.channel_label.setFont(
             QFont(Theme.FAMILY, 10, QFont.Weight.Bold)
         )
+        self.panel.platform_label = QLabel("")
+        self.panel.platform_label.setStyleSheet(
+            "color: #888888; font-size: 8px; font-weight: bold;"
+        )
         self.panel.live_label = QLabel("● LIVE")
         self.panel.live_label.setStyleSheet(
             f"color: {Theme.RED}; font-weight: bold; font-size: 8px;"
         )
         name_row.addWidget(self.panel.channel_label)
+        name_row.addWidget(self.panel.platform_label)
         name_row.addWidget(self.panel.live_label)
         info_layout.addLayout(name_row)
 

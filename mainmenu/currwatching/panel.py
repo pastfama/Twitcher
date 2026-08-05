@@ -48,6 +48,19 @@ class CurrentWatchingPanel(QFrame):
         channel = stream.get("user_name", "Unknown")
         self.channel_label.setText(f"#{channel}")
 
+        # --- Platform badge ---
+        platform = stream.get("platform", "twitch")
+        badge_colors = {
+            "twitch": "#9146FF",
+            "kick": "#53FC18",
+            "youtube": "#FF0000",
+        }
+        badge_color = badge_colors.get(platform, "#888888")
+        self.platform_label.setText(platform.upper())
+        self.platform_label.setStyleSheet(
+            f"color: {badge_color}; font-size: 8px; font-weight: bold;"
+        )
+
         # --- Viewer count + history graph ---
         viewer_count = stream.get("viewer_count", 0)
         self.viewer_history_graph.add_point(viewer_count)
@@ -213,7 +226,12 @@ class CurrentWatchingPanel(QFrame):
 
         # Get current data
         viewer_count = stream.get("viewer_count", 0)
-        login = (stream.get("user_login") or stream.get("user_name") or "").lower().strip()
+        login = (
+            stream.get("user_login")
+            or stream.get("user_name")
+            or stream.get("channel")
+            or ""
+        ).lower().strip()
 
         # Update LCD counter
         self.enlarged_lcd_counter.display(viewer_count)
@@ -223,7 +241,11 @@ class CurrentWatchingPanel(QFrame):
 
         # Persist viewer history to DB
         if login:
-            store_viewer_history(login, viewer_count)
+            store_viewer_history(
+                login,
+                viewer_count,
+                platform=stream.get("platform", "twitch")
+            )
 
         # Update momentum label and gauge from analysis
         if analysis:

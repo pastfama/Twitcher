@@ -108,7 +108,7 @@ class MainMenuStreamState:
             # Fetch from all platforms
             all_live = []
 
-            # Twitch (primary)
+            # Twitch (primary) — followed channels from the API
             try:
                 followed = self.api.get_followed_channels(
                     user_id
@@ -122,29 +122,23 @@ class MainMenuStreamState:
             except Exception as e:
                 self.log(f"[LIVE] Twitch error: {e}")
 
-            # Kick (if platform manager available)
+            # Kick and YouTube have no public "followed channels"
+            # endpoint, so we use the local watchlist instead.
             try:
-                from platforms import get_platform_manager
-                pm = get_platform_manager()
-                if pm.kick:
-                    kick_live = pm.kick.get_live_streams([])
-                    for stream in kick_live:
-                        stream["platform"] = "kick"
-                    all_live.extend(kick_live)
+                from core.db import get_watchlist
+                watchlist = get_watchlist()
             except Exception as e:
-                self.log(f"[LIVE] Kick error: {e}")
+                self.log(f"[LIVE] Watchlist error: {e}")
+                watchlist = []
 
-            # YouTube (if platform manager available)
+            # Use the unified platform manager for Kick/YouTube.
             try:
                 from platforms import get_platform_manager
                 pm = get_platform_manager()
-                if pm.youtube:
-                    youtube_live = pm.youtube.get_live_streams([])
-                    for stream in youtube_live:
-                        stream["platform"] = "youtube"
-                    all_live.extend(youtube_live)
+                non_twitch_live = pm.get_live_streams(watchlist)
+                all_live.extend(non_twitch_live)
             except Exception as e:
-                self.log(f"[LIVE] YouTube error: {e}")
+                self.log(f"[LIVE] Platform manager error: {e}")
 
             return all_live
 
@@ -493,9 +487,19 @@ class MainMenuStreamState:
 
 
 
-    def connect_chat(self, channel):
+    def connect_chat(self, channel, platform="twitch"):
 
         if not channel:
+            return
+
+
+        # Only Twitch has IRC chat integration. Other platforms get a
+        # graceful "chat unavailable" state instead of a broken IRC connect.
+        if platform != "twitch":
+            self.chat_panel.show_platform_unavailable(platform)
+            self.log(
+                f"Chat unavailable for {platform} channel #{channel}"
+            )
             return
 
 
@@ -557,20 +561,40 @@ class MainMenuStreamState:
             return
 
 
+        # Determine the platform from the current stream if available,
+        # otherwise fall back to URL auto-detection (bare names default
+        # to Twitch for backward compatibility).
+        platform = None
+        if self.current_stream:
+            platform = self.current_stream.get("platform")
+        if not platform:
+            from platforms import detect_platform
+            platform = detect_platform(channel)
+
+        # Strip explicit platform prefixes ("kick:xqc" -> "xqc") so the
+        # stored channel name and history are clean.
+        from platforms import strip_platform_prefix
+        channel = strip_platform_prefix(channel).lstrip("#").lower()
+
         self.pending_channel = channel
 
 
         self.dispatcher_panel.set_status(
-            f"Resolving {channel}..."
+            f"Resolving {channel} ({platform})..."
         )
 
 
+        def resolve():
+            from core.stream_resolver import resolve_stream_url
+            return resolve_stream_url(channel, platform_name=platform)
+
         self._run_background(
-            lambda: self.api.get_stream_url(channel),
+            resolve,
             lambda url: self.handle_stream_url_resolved(
                 channel,
                 url,
-                manual
+                manual,
+                platform
             ),
             lambda message: self.handle_stream_url_failed(
                 channel,
@@ -580,7 +604,7 @@ class MainMenuStreamState:
 
 
 
-    def handle_stream_url_resolved(self, channel, url, manual):
+    def handle_stream_url_resolved(self, channel, url, manual, platform="twitch"):
 
         self.pending_channel = None
 
@@ -602,7 +626,8 @@ class MainMenuStreamState:
         switched = self.dispatcher.switch_stream(
             streamer=channel,
             url=url,
-            announce=manual
+            announce=manual,
+            platform=platform
         )
 
 
@@ -632,11 +657,19 @@ class MainMenuStreamState:
 
 
         self.connect_chat(
-            channel
+            channel,
+            platform=platform
         )
 
 
-        self.raid_monitor.start()
+        # Only Twitch has a raid system; set the channel so the
+        # EventSub websocket subscribes for incoming raids.
+        if platform == "twitch":
+            self.raid_monitor.set_channel(
+                channel
+            )
+
+            self.raid_monitor.start()
 
 
         self.dispatcher_panel.set_status(

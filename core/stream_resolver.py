@@ -28,7 +28,7 @@ def resolve_stream_url(channel, platform_name=None):
         platform_name: Force a specific platform (twitch, kick, youtube),
                        or None for auto-detection
     """
-    from platforms import detect_platform, get_platform
+    from platforms import detect_platform, get_platform, strip_platform_prefix
 
     if platform_name is None:
         platform_name = detect_platform(channel)
@@ -39,8 +39,12 @@ def resolve_stream_url(channel, platform_name=None):
 
     platform = platform_cls()
 
+    # Strip explicit platform prefixes ("kick:xqc", "yt:@handle") so the
+    # platform's normalize_channel receives the bare channel name.
+    bare_channel = strip_platform_prefix(channel)
+
     try:
-        stream_info = platform.resolve_stream(channel)
+        stream_info = platform.resolve_stream(bare_channel)
         return stream_info.url
     except PlatformError as exc:
         raise StreamResolverError(str(exc))
