@@ -139,7 +139,7 @@ class MainMenu(
         # ============================================================
         # UI — build panels, connect signals
         # ============================================================
-        self.setWindowTitle("Watcher Control Center")
+        self.setWindowTitle("WATCHER: MainMenu")
         self.setMinimumSize(1400, 800)
 
         self.avatar_cache = {}
@@ -152,6 +152,7 @@ class MainMenu(
         self.dispatcher_panel_cls = DispatcherPanel
 
         self.build_interface()
+        self.clear_saved_geometry()  # Clear old geometry so new layout takes effect
         self.restore_window_geometry()
 
         # ============================================================
@@ -263,16 +264,28 @@ class MainMenu(
 
     def _on_viewer_update(self, stream, analytics):
         """Called by ViewerMonitor with fresh stream data + analytics."""
-        self.update_current_stream_view(stream, analytics)
+        try:
+            self.update_current_stream_view(stream, analytics)
+        except Exception as exc:
+            debug(f"[VIEWER] update error: {exc}")
+            self.log(f"ERROR: Viewer update failed: {exc}")
 
     def _on_analytics_signal(self, stream, analysis):
         """Handle analytics update from background thread via signal."""
-        if stream and analysis:
-            incoming = (stream.get("user_login") or stream.get("user_name") or "").lower().strip()
-            if self.current_channel and incoming != self.current_channel:
-                return
-            self.current_stream = stream
-            self.update_current_stream_view(stream, analysis)
+        try:
+            if stream and analysis:
+                incoming = (stream.get("user_login") or stream.get("user_name") or "").lower().strip()
+                if self.current_channel and incoming != self.current_channel:
+                    return
+                # Use the MOST RECENT stream data from live_channels to avoid
+                # stale viewer_count=0 from AnalyticsEngine.current_stream.
+                live_stream = self.get_live_stream_by_channel(incoming)
+                if live_stream:
+                    stream = live_stream
+                self.update_current_stream_view(stream, analysis)
+        except Exception as exc:
+            debug(f"[SG-SIGNAL] EXCEPTION: {exc}")
+            self.log(f"ERROR: Analytics signal failed: {exc}")
 
     def _on_dispatcher_status(self, message):
         self.dispatcher_panel.set_status(message)

@@ -8,17 +8,17 @@ QWidget {
 QGroupBox {
     background-color: #10121c;
     border: 1px solid #292d42;
-    border-radius: 12px;
-    margin-top: 12px;
-    padding: 10px;
-    font-size: 13px;
+    border-radius: 8px;
+    margin-top: 8px;
+    padding: 6px;
+    font-size: 12px;
     font-weight: bold;
     color: #aeb8ff;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
-    left: 14px;
-    padding: 0 8px;
+    left: 10px;
+    padding: 0 6px;
     background-color: #08090f;
 }
 QLabel {
@@ -66,11 +66,11 @@ QTextEdit {
 QFrame#CurrentCard {
     background-color: #141827;
     border: 1px solid #3c456b;
-    border-radius: 14px;
+    border-radius: 8px;
 }
 QFrame#NextCard {
     background-color: #101c1b;
     border: 1px solid #315f58;
-    border-radius: 14px;
+    border-radius: 8px;
 }
 """

@@ -13,13 +13,11 @@ from PySide6.QtWidgets import (
 )
 from ..theme import Theme
 from ..currwatching.image_cache import ImageCache
+from widgets.base import SizeVariant
+from widgets.sullygoose import SullyGooseWidget
+from widgets.mom import AnalogGauge
 
-# --- Platform badge colors (shared with currwatching) ---
-_BADGE_COLORS = {
-    "twitch": "#9146FF",
-    "kick": "#53FC18",
-    "youtube": "#FF0000",
-}
+# Badge colors centralized in Theme.BADGE_COLORS
 
 # --- Button styles ---
 _ACTIVE_BTN_STYLE = f"""
@@ -89,18 +87,6 @@ class NextStreamPanel(QFrame):
         title.setStyleSheet(f"color: {Theme.TEAL}; letter-spacing: 1px;")
         layout.addWidget(title)
 
-        # --- Thumbnail ---
-        self.next_thumbnail = QLabel()
-        self.next_thumbnail.setFixedSize(160, 90)
-        self.next_thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.next_thumbnail.setStyleSheet(
-            f"background-color: {Theme.DARK_PANEL}; "
-            f"border: 1px solid {Theme.SECTION_BORDER}; "
-            f"border-radius: 6px; color: {Theme.DIM}; font-size: 11px;"
-        )
-        self.next_thumbnail.setText("--")
-        layout.addWidget(self.next_thumbnail)
-
         # --- Channel row (avatar + name + platform) ---
         channel_row = QHBoxLayout()
         channel_row.setSpacing(6)
@@ -146,6 +132,24 @@ class NextStreamPanel(QFrame):
         stats_row.addStretch()
         layout.addLayout(stats_row)
 
+        # --- S-size analytics widgets (compact) ---
+        analytics_row = QHBoxLayout()
+        analytics_row.setSpacing(6)
+
+        self.next_mom_gauge = AnalogGauge(variant=SizeVariant.S)
+        analytics_row.addWidget(self.next_mom_gauge)
+
+        self.next_sg_widget = SullyGooseWidget(size=SizeVariant.S)
+        analytics_row.addWidget(self.next_sg_widget, 1)
+
+        layout.addLayout(analytics_row)
+
+        # Log widget init
+        import logging
+        logging.getLogger(__name__).debug(
+            "[WIDGET] NextStream: AnalogGauge (S) 50x50px + SullyGooseWidget (S) 5 metrics + 2 bars"
+        )
+
         # --- Category ---
         self.next_category_label = QLabel("--")
         self.next_category_label.setStyleSheet(
@@ -153,20 +157,7 @@ class NextStreamPanel(QFrame):
         )
         layout.addWidget(self.next_category_label)
 
-        # --- Reason ---
-        self.next_reason_label = QLabel("Waiting for live channels...")
-        self.next_reason_label.setWordWrap(True)
-        self.next_reason_label.setStyleSheet(
-            f"color: {Theme.DIM}; font-size: 9px;"
-        )
-        layout.addWidget(self.next_reason_label)
-
-        # --- Switch Now button ---
-        self.switch_button = QPushButton("SWITCH NOW")
-        self.switch_button.setFont(QFont(Theme.FAMILY, 9, QFont.Weight.Bold))
-        self.switch_button.setStyleSheet(_ACTIVE_BTN_STYLE)
-        self.switch_button.clicked.connect(self._on_switch_clicked)
-        layout.addWidget(self.switch_button)
+        # (Reason and SWITCH NOW button removed to save space)
 
     # ================================================================
     # PUBLIC API
@@ -191,7 +182,7 @@ class NextStreamPanel(QFrame):
         self.next_channel_label.setText(channel)
 
         # Platform badge
-        badge_color = _BADGE_COLORS.get(platform, "#888888")
+        badge_color = Theme.BADGE_COLORS.get(platform, "#888888")
         self.next_platform_label.setText(platform.upper())
         self.next_platform_label.setStyleSheet(
             f"color: {badge_color}; font-size: 8px; font-weight: bold;"
@@ -209,10 +200,7 @@ class NextStreamPanel(QFrame):
         # Category
         self.next_category_label.setText(category)
 
-        # Reason
-        self.next_reason_label.setText(
-            "If the current stream ends without a raid, Watcher will switch here."
-        )
+        # (Reason text removed)
 
         # Avatar
         self.image_cache.load(
@@ -220,9 +208,38 @@ class NextStreamPanel(QFrame):
             (32, 32), placeholder="?",
         )
 
-        # Button
-        self.switch_button.setEnabled(True)
-        self.switch_button.setStyleSheet(_ACTIVE_BTN_STYLE)
+        # S-size analytics widgets
+        self._update_analytics(stream)
+
+
+    def _update_analytics(self, stream):
+        """Update S-size MOM gauge and SG widget with analytics data."""
+        login = stream.get("user_login") or stream.get("user_name") or ""
+        login = login.lower().strip()
+        viewers = int(stream.get("viewer_count", 0))
+        platform = stream.get("platform", "twitch")
+
+        # MOM gauge — show viewer momentum if available
+        # Default to 50 (stable) when no trend data
+        momentum = stream.get("trend_momentum", 50)
+        self.next_mom_gauge.set_value(momentum, "MOM")
+
+        # SG widget — look up cached SullyGoose data
+        sully = None
+        try:
+            # Access analytics engine via the parent MainMenu
+            # The panel doesn't hold a direct reference, so we look it up
+            # through the app's analytics engine
+            app = self.window()
+            if app and hasattr(app, 'analytics_engine'):
+                sully = app.analytics_engine.sullygoose_for(
+                    login, viewers, platform=platform
+                )
+        except Exception:
+            pass
+
+        if sully:
+            self.next_sg_widget.update_metrics(sully, {"score": 0})
 
     def clear(self):
         """Reset to empty state."""
@@ -232,12 +249,11 @@ class NextStreamPanel(QFrame):
         self.next_viewers_label.setText("--")
         self.next_trend_label.setText("")
         self.next_category_label.setText("--")
-        self.next_reason_label.setText("No other followed channels are currently live.")
-        self.next_thumbnail.setText("--")
         self.next_avatar_label.setText("?")
 
-        self.switch_button.setEnabled(False)
-        self.switch_button.setStyleSheet(_INACTIVE_BTN_STYLE)
+        # Clear analytics widgets
+        self.next_mom_gauge.set_value(50, "MOM")
+        self.next_sg_widget.update_metrics(None)
 
     # ================================================================
     # INTERNAL

@@ -56,6 +56,80 @@ class Theme:
         "stop:1 #00ffff"
     )
 
+    # --- platform badge colors ---
+    BADGE_COLORS = {
+        "twitch": "#9146FF",
+        "kick": "#53FC18",
+        "youtube": "#FF0000",
+    }
+
+    @staticmethod
+    def badge_style(platform):
+        """Return stylesheet for a platform badge label."""
+        color = Theme.BADGE_COLORS.get(platform, "#888888")
+        return (
+            f"color: {color}; font-size: 8px; font-weight: bold;"
+        )
+
+    @staticmethod
+    def connection_dot_style(color):
+        """Return stylesheet for a connection status dot."""
+        return (
+            f"color: {color}; font-size: 9px; font-weight: bold; "
+            f"padding: 2px 6px; border-radius: 3px; "
+            f"background-color: {Theme.DARK_PANEL};"
+        )
+
+    @staticmethod
+    def search_input_style():
+        """Return stylesheet for a search/filter input."""
+        return f"""
+            QLineEdit {{
+                background-color: {Theme.DARK_PANEL};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.SECTION_BORDER};
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-size: 11px;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {Theme.CYAN};
+            }}
+        """
+
+    @staticmethod
+    def add_button_style():
+        """Return stylesheet for the + add button."""
+        return f"""
+            QPushButton {{
+                background-color: {Theme.AVATAR_BG};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.SECTION_BORDER};
+                border-radius: 4px;
+                padding: 4px 10px;
+                font-size: 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.CYAN};
+                color: #000000;
+            }}
+        """
+
+    @staticmethod
+    def platform_combo_style():
+        """Return stylesheet for the platform combo box."""
+        return f"""
+            QComboBox {{
+                background-color: {Theme.DARK_PANEL};
+                color: {Theme.TEXT_PRIMARY};
+                border: 1px solid {Theme.SECTION_BORDER};
+                border-radius: 4px;
+                padding: 4px 6px;
+                font-size: 11px;
+            }}
+        """
+
     # --- common styles ---
     @staticmethod
     def group_box_style(title_color=None):

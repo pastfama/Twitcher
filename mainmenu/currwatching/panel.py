@@ -29,12 +29,7 @@ _MOMENTUM_COLORS = {
 }
 _DEFAULT_MOMENTUM_COLOR = "#f2f2f2"
 
-# Platform badge colors.
-_BADGE_COLORS = {
-    "twitch": "#9146FF",
-    "kick": "#53FC18",
-    "youtube": "#FF0000",
-}
+# Badge colors centralized in Theme.BADGE_COLORS
 
 
 class CurrentWatchingPanel(QFrame):
@@ -81,7 +76,7 @@ class CurrentWatchingPanel(QFrame):
 
         # --- Platform badge ---
         platform = stream.get("platform", "twitch")
-        badge_color = _BADGE_COLORS.get(platform, "#888888")
+        badge_color = Theme.BADGE_COLORS.get(platform, "#888888")
         self.platform_label.setText(platform.upper())
         self.platform_label.setStyleSheet(
             f"color: {badge_color}; font-size: 8px; font-weight: bold;"
@@ -91,7 +86,6 @@ class CurrentWatchingPanel(QFrame):
         viewer_count = stream.get("viewer_count", 0)
         self.enlarged_lcd_counter.display(viewer_count)
         self.viewer_history_graph.add_point(viewer_count)
-        self.neon_viewer_counter.set_active(viewer_count > 0)
 
         # --- Title ---
         self.title_label.setText(stream.get("title", "—"))
@@ -151,19 +145,24 @@ class CurrentWatchingPanel(QFrame):
             return
 
         status = analysis.get("status", "")
-        percent = analysis.get("percent") or 0
-
-        # Momentum label — color-coded.
-        color = _MOMENTUM_COLORS.get(status, _DEFAULT_MOMENTUM_COLOR)
-        self.momentum_label.setStyleSheet(
-            f"color: {color}; font-size: 11px; font-weight: bold;"
-        )
-        self.momentum_label.setText(f"{status} {percent:+.1f}%")
-
-        # Gauge — map percent (-50..+50) to gauge (0..100).
-        self.mini_gauge.set_value(
-            max(0, min(100, int(percent + 50))), "MOM"
-        )
+        percent = analysis.get("percent")
+        # Only use percent if it was explicitly set (not None)
+        # When None, show "Collecting data..." instead of "Stable +0.0%"
+        if percent is None:
+            self.momentum_label.setText("📊 Collecting data...")
+            self.momentum_label.setStyleSheet(
+                f"color: {Theme.DIM}; font-size: 11px; font-weight: bold;"
+            )
+            self.mini_gauge.set_value(50, "MOM")
+        else:
+            color = _MOMENTUM_COLORS.get(status, _DEFAULT_MOMENTUM_COLOR)
+            self.momentum_label.setStyleSheet(
+                f"color: {color}; font-size: 11px; font-weight: bold;"
+            )
+            self.momentum_label.setText(f"{status} {percent:+.1f}%")
+            self.mini_gauge.set_value(
+                max(0, min(100, int(percent + 50))), "MOM"
+            )
 
         # SullyGoose — only update when data actually changed.
         sully = analysis.get("sullygoose") or {}
@@ -172,6 +171,11 @@ class CurrentWatchingPanel(QFrame):
             if fingerprint != self._last_sg_fingerprint:
                 self._last_sg_fingerprint = fingerprint
                 self.sully_widget.update_metrics(sully, analysis)
+                logger.debug(f"[SG] Widget updated: growth={fingerprint}, "
+                             f"rank={sully.get('category_rank')}, "
+                             f"avg={sully.get('avg_viewers')}")
+            else:
+                logger.debug(f"[SG] Skipped (fingerprint unchanged: {fingerprint})")
 
     # ================================================================
     # CLEAR
@@ -188,10 +192,16 @@ class CurrentWatchingPanel(QFrame):
         self.title_label.setText("—")
         self.momentum_label.setText("📊 Waiting...")
         self.set_avatar_image(None)
-        self.neon_viewer_counter.set_active(False)
-
         if hasattr(self, "sully_widget") and self.sully_widget:
             self.sully_widget.update_metrics(None)
+
+    def reset_sully_fingerprint(self):
+        """Reset the SullyGoose dedup fingerprint so next update always applies.
+
+        Call this when switching to a different channel so the new channel's
+        SullyGoose data is displayed even if viewer_growth happens to match.
+        """
+        self._last_sg_fingerprint = None
 
     # ================================================================
     # IMAGE LOADING

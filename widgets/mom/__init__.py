@@ -19,9 +19,7 @@ Module Layout:
     │ [VIEWERS] [LIVE] [CHAT] [RAID] │  ← NeonIndicator row
     └──────────────────────────────────┘
 
-Usage in currwatching/ui.py::
-
-    from widgets.mom import AnalogGauge, GAUGE_SIZE, MOM_WIDTH, LCD_WIDTH, LCD_HEIGHT, GRAPH_HEIGHT
+    S size (compact): Just the gauge (50×50) with no LCD/graph/indicators.
 
 Exports:
     AnalogGauge   — Circular gauge widget (QWidget, custom-painted)

@@ -180,10 +180,18 @@ class MainMenuStreamState:
             streams
         )
 
+        self.dispatcher_panel.set_status(
+            f"{len(streams)} channels live"
+        )
 
-        # If nothing is currently playing, auto-start the top live channel.
-        # This ensures the video window actually plays the stream the UI
-        # is displaying, instead of staying blank until the user clicks.
+        self.log(
+            f"Found {len(streams)} live channels."
+        )
+
+        # Try to resume the last watched streamer FIRST.
+        # Only auto-start the top channel if no previous streamer was saved.
+        self.try_resume_last_streamer()
+
         if not self.current_channel and streams:
 
             top = streams[0]
@@ -201,21 +209,7 @@ class MainMenuStreamState:
                     manual=False
                 )
 
-
         self.update_next_stream()
-
-
-        self.dispatcher_panel.set_status(
-            f"{len(streams)} channels live"
-        )
-
-
-        self.log(
-            f"Found {len(streams)} live channels."
-        )
-
-
-        self.try_resume_last_streamer()
 
 
 
@@ -368,24 +362,10 @@ class MainMenuStreamState:
 
         self.next_stream = candidates[0]
 
-
-        self.next_panel.set_stream(
-            self.next_stream
-        )
-
-
-        channel = self.next_stream.get(
-            "user_name",
-            "Unknown"
-        )
-
-
-        viewers = self.next_stream.get(
-            "viewer_count",
-            0
-        )
-
-
+        # Emit signal — next_panel subscribes via next_stream_changed.
+        # Also update dispatcher status directly (not signal-driven).
+        channel = self.next_stream.get("user_name", "Unknown")
+        viewers = self.next_stream.get("viewer_count", 0)
         self.dispatcher_panel.set_next_status(
             f"Next: #{channel} ({viewers:,} viewers)"
         )
@@ -440,10 +420,21 @@ class MainMenuStreamState:
 
         enriched_stream = self.enrich_stream_with_avatar(stream)
 
+        # Fix: if the incoming stream has viewer_count=0 (API inconsistency),
+        # look up the correct count from live_channels (batch API data).
+        if enriched_stream.get("viewer_count", 0) == 0:
+            correct = self.get_live_stream_by_channel(
+                enriched_stream.get("user_login") or enriched_stream.get("user_name") or ""
+            )
+            if correct and correct.get("viewer_count", 0) > 0:
+                enriched_stream["viewer_count"] = correct["viewer_count"]
+                # Also preserve title/started_at if missing
+                if not enriched_stream.get("title") and correct.get("title"):
+                    enriched_stream["title"] = correct["title"]
+                if not enriched_stream.get("started_at") and correct.get("started_at"):
+                    enriched_stream["started_at"] = correct["started_at"]
+
         # ViewerMonitor already computed analytics on its background thread.
-        # Only recompute when called directly (e.g. channel_selected) without
-        # pre-computed analytics.  This eliminates a redundant update_stream()
-        # call that would re-run viewer_tracker.update_stream + collect_external_data.
         if analytics is None:
             analysis = self.analytics_engine.update_stream(enriched_stream)
         else:
@@ -452,11 +443,8 @@ class MainMenuStreamState:
         # Update cached stream for timer-based tick() refreshes.
         self.current_stream = enriched_stream
 
-        # Emit fully-processed signal so panels can self-update.
+        # Emit fully-processed signal — panels subscribe via stream_ready.
         self.state.stream_ready.emit(enriched_stream, analysis)
-
-        # Also call directly for backward compatibility.
-        self.current_panel.set_stream(enriched_stream, analysis)
 
 
 
@@ -474,6 +462,10 @@ class MainMenuStreamState:
         ).lower().strip()
         if channel_login:
             self.current_channel = channel_login
+
+        # Reset SullyGoose fingerprint so new channel's data always displays.
+        if hasattr(self, "current_panel") and self.current_panel:
+            self.current_panel.reset_sully_fingerprint()
 
         self.current_stream = stream
 
@@ -666,10 +658,17 @@ class MainMenuStreamState:
 
         self.current_channel = channel
 
-        self.current_stream = (
-            self.get_live_stream_by_channel(channel)
-            or self.current_stream
-        )
+        # Use the full stream dict from live_channels (has viewer_count, title, etc.)
+        live_stream = self.get_live_stream_by_channel(channel)
+        if live_stream:
+            self.current_stream = live_stream
+        elif self.current_stream is None:
+            # Minimal fallback if no live data available
+            self.current_stream = {
+                "user_login": channel,
+                "user_name": channel,
+                "platform": platform,
+            }
 
         # Ensure the channel is in live_channels so ViewerMonitor tracks it.
         if self.current_stream not in self.live_channels:

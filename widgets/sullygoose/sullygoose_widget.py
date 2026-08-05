@@ -1,42 +1,31 @@
-"""SullyGoose analytics widget — compact metric grid for the Current Watching panel.
+"""SullyGoose analytics widget — metric grid for stream panels.
 
 Displays streamer performance data scraped from sullygnome.com by the
 ``SullyGooseAPI`` and delivered through the ``AnalyticsEngine``.
 
-Size Constants (exported from this module, used across the app):
-----------------------------------------------------------------
-METRIC_CELL_HEIGHT = 36   Height (px) of each MetricCell in the grid.
-SCORE_BAR_WIDTH    = 52   Width  (px) of each ScoreBar progress widget.
-SCORE_BAR_HEIGHT   = 32   Height (px) of each ScoreBar.
-PANEL_MIN_WIDTH    = 280  Minimum width for the entire SullyGoose panel.
+Supports two size variants via ``SizeVariant``:
+    M (Medium) — 17 metric cells (3×6 grid) + 4 score bars
+    S (Small)  — 5 metric cells (1 row)   + 2 score bars
 
-Architecture Notes:
---------------------
-The widget is instantiated once by ``CurrentWatchingUIBuilder`` and stored
-as ``panel.sully_widget``.  It receives updates via::
+Size Constants (M, exported for backward compat):
+    METRIC_CELL_HEIGHT = 36
+    SCORE_BAR_WIDTH    = 52
+    SCORE_BAR_HEIGHT   = 32
+    PANEL_MIN_WIDTH    = 280
 
-    panel.sully_widget.update_metrics(sully_data, analysis)
+Usage::
 
-The ``sully_data`` dict is the raw SullyGoose cache (keyed by metric
-names).  The optional ``analysis`` dict carries the composite score
-from ``AnalyticsEngine.calculate_score()``.
+    # M size (default, for Current Watching panel)
+    widget = SullyGooseWidget()
 
-Metric Grid Layout (3 rows × 6 columns):
-    Row 0:  AVG | PEAK | GRW  | RANK | FRQ  | DUR
-    Row 1:  START| END  | GAMES| MAIN | RAID | FOL
-    Row 2:  FGRW | CHAT | 7D   | 30D  | BEST | (empty)
+    # S size (for side panels, live-followed rows)
+    widget = SullyGooseWidget(size=SizeVariant.S)
 
-Score Bars (bottom row, 4 bars):
-    CONS  — consistency_score   (how regular the schedule is)
-    REL   — reliability_score   (how often the streamer goes live on time)
-    DISC  — discovery_score     (how discoverable in category browse)
-    QUAL  — composite quality   (from AnalyticsEngine, 0-100)
-
-When no data is available, all cells show "—" and score bars are zeroed.
+    widget.update_metrics(sully_data, analysis)
 """
 
-from PySide6.QtCore import QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -48,8 +37,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from widgets.base import (
+    SizeVariant, WidgetMetrics, SizedWidget,
+    SG_M_METRICS, SG_M_BARS, SG_S_METRICS, SG_S_BARS,
+)
 
-# Top-level size constants (codewide)
+# Backward-compat exports (M size defaults)
 METRIC_CELL_HEIGHT = 36
 SCORE_BAR_WIDTH = 52
 SCORE_BAR_HEIGHT = 32
@@ -59,24 +52,24 @@ PANEL_MIN_WIDTH = 280
 class MetricCell(QWidget):
     """Compact metric cell with title and large value."""
 
-    # Class constant
-    CELL_HEIGHT = METRIC_CELL_HEIGHT
-
-    def __init__(self, title="", value="—", parent=None):
+    def __init__(self, title="", value="—", height=36, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(self.CELL_HEIGHT)
+        self.setFixedHeight(height)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 1, 2, 1)
         layout.setSpacing(0)
 
+        font_size = 8 if height < 30 else 9
+        val_size = 10 if height < 30 else 11
+
         self.title_label = QLabel(title)
-        self.title_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        self.title_label.setFont(QFont("Segoe UI", font_size, QFont.Weight.Bold))
         self.title_label.setStyleSheet("color: #6b6b80;")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.value_label = QLabel(str(value))
-        self.value_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.value_label.setFont(QFont("Segoe UI", val_size, QFont.Weight.Bold))
         self.value_label.setStyleSheet("color: #00d4ff;")
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -87,34 +80,34 @@ class MetricCell(QWidget):
         self.value_label.setText(str(value))
 
     def set_color(self, color_hex):
-        self.value_label.setStyleSheet(f"color: {color_hex}; font-size: 11px; font-weight: bold;")
+        sz = self.value_label.font().pointSize()
+        self.value_label.setStyleSheet(
+            f"color: {color_hex}; font-size: {sz}px; font-weight: bold;"
+        )
 
 
 class ScoreBar(QWidget):
     """Labeled progress bar for SullyGoose scores."""
 
-    # Class constants
-    BAR_WIDTH = SCORE_BAR_WIDTH
-    BAR_HEIGHT = SCORE_BAR_HEIGHT
-
-    def __init__(self, label_text="", parent=None):
+    def __init__(self, label_text="", width=52, height=32, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(self.BAR_WIDTH)
-        self.setFixedHeight(self.BAR_HEIGHT)
+        self.setFixedWidth(width)
+        self.setFixedHeight(height)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(1)
 
+        bar_height = 10 if height < 28 else 12
         self.bar = QProgressBar()
         self.bar.setRange(0, 100)
         self.bar.setTextVisible(True)
-        self.bar.setFixedHeight(12)
+        self.bar.setFixedHeight(bar_height)
         self.bar.setStyleSheet(self._style())
         layout.addWidget(self.bar)
 
         lbl = QLabel(label_text)
-        lbl.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        lbl.setFont(QFont("Segoe UI", 7 if height < 28 else 8, QFont.Weight.Bold))
         lbl.setStyleSheet("color: #6b6b80;")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl)
@@ -150,14 +143,19 @@ class ScoreBar(QWidget):
         )
 
 
-class SullyGooseWidget(QFrame):
-    """Compact SullyGoose analytics grid with score bars."""
+class SullyGooseWidget(QFrame, SizedWidget):
+    """SullyGoose analytics grid with score bars.
 
-    # Class constant
-    MIN_WIDTH = PANEL_MIN_WIDTH
+    Supports M (Medium) and S (Small) size variants:
+        M: 17 metric cells + 4 score bars (full panel)
+        S: 5 metric cells  + 2 score bars (compact sidebar)
+    """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, size=SizeVariant.M):
         super().__init__(parent)
+        self._init_metrics(size)
+        m = self._metrics
+
         self.setObjectName("sullygoosePanel")
         self.setStyleSheet(
             "QFrame#sullygoosePanel {"
@@ -166,7 +164,7 @@ class SullyGooseWidget(QFrame):
             "  border-radius: 3px;"
             "}"
         )
-        self.setMinimumWidth(self.MIN_WIDTH)
+        self.setMinimumWidth(m.sg_panel_min_width)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         main = QVBoxLayout(self)
@@ -175,32 +173,30 @@ class SullyGooseWidget(QFrame):
 
         # Title
         title = QLabel("◆ SULLYGOOSE ◆")
-        title.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        title.setFont(QFont("Segoe UI", 8 if size == SizeVariant.S else 9, QFont.Weight.Bold))
         title.setStyleSheet("color: #00d4ff;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main.addWidget(title)
 
-        # 6-column metric grid
+        # Metric grid — dynamic rows based on variant
+        if size == SizeVariant.M:
+            metrics_list = SG_M_METRICS
+            bars_list = SG_M_BARS
+            cols = m.sg_grid_cols
+        else:
+            metrics_list = SG_S_METRICS
+            bars_list = SG_S_BARS
+            cols = m.sg_grid_cols
+
         grid = QGridLayout()
         grid.setSpacing(2)
 
-        metrics = [
-            ("AVG", "sully_avg"), ("PEAK", "sully_peak"),
-            ("GRW", "sully_growth"), ("RANK", "sully_rank"),
-            ("FRQ", "sully_freq"), ("DUR", "sully_duration"),
-            ("START", "sully_start"), ("END", "sully_end"),
-            ("GAMES", "sully_games"), ("MAIN", "sully_main"),
-            ("RAID", "sully_raid"), ("FOL", "sully_followers"),
-            ("FGRW", "sully_follower_growth"),
-            ("CHAT", "sully_chat"),
-            ("7D", "sully_trend_7d"), ("30D", "sully_trend_30d"),
-            ("BEST", "sully_best_day"),
-        ]
-
-        for idx, (title, attr) in enumerate(metrics):
-            cell = MetricCell(title)
+        self._cells = {}
+        for idx, (title_text, attr) in enumerate(metrics_list):
+            cell = MetricCell(title_text, height=m.sg_cell_height)
             setattr(self, attr, cell)
-            grid.addWidget(cell, idx // 6, idx % 6)
+            self._cells[attr] = cell
+            grid.addWidget(cell, idx // cols, idx % cols)
 
         main.addLayout(grid)
 
@@ -208,14 +204,12 @@ class SullyGooseWidget(QFrame):
         bars = QHBoxLayout()
         bars.setSpacing(2)
 
-        for name, text in [
-            ("sully_consistency_bar", "CONS"),
-            ("sully_reliability_bar", "REL"),
-            ("sully_discovery_bar", "DISC"),
-            ("sully_score_bar", "QUAL"),
-        ]:
-            bars.addWidget(ScoreBar(text))
-            setattr(self, name, bars.itemAt(bars.count() - 1).widget())
+        self._bars = {}
+        for attr, text in bars_list:
+            bar = ScoreBar(text, width=m.sg_score_bar_width, height=m.sg_score_bar_height)
+            bars.addWidget(bar)
+            setattr(self, attr, bar)
+            self._bars[attr] = bar
 
         main.addLayout(bars)
 
@@ -225,83 +219,102 @@ class SullyGooseWidget(QFrame):
             return
 
         # Viewers
-        self.sully_avg.set_value(f"{sully.get('avg_viewers', 0):,}")
-        self.sully_peak.set_value(f"{sully.get('peak_viewers', 0):,}")
+        self._set_cell("sully_avg", f"{sully.get('avg_viewers', 0):,}")
+        self._set_cell("sully_peak", f"{sully.get('peak_viewers', 0):,}")
 
         # Growth & Rank
         growth = sully.get("viewer_growth") or 0
-        self.sully_growth.set_value(f"{growth:+.1f}%")
-        self.sully_growth.set_color("#72d6a0" if growth > 0 else ("#ff7777" if growth < 0 else "#f2f2f2"))
+        self._set_cell("sully_growth", f"{growth:+.1f}%")
+        self._set_cell_color("sully_growth",
+            "#72d6a0" if growth > 0 else ("#ff7777" if growth < 0 else "#f2f2f2"))
 
         rank = sully.get("category_rank") or 0
-        self.sully_rank.set_value(f"#{rank}")
+        self._set_cell("sully_rank", f"#{rank}")
 
-        freq = sully.get("stream_frequency") or 0
-        self.sully_freq.set_value(f"{freq:.0f}h/wk")
-
-        # Schedule
-        dur = sully.get("avg_stream_duration", 0)
-        self.sully_duration.set_value(f"{dur:.1f}h")
-
-        start_h = sully.get("typical_start_hour") or 0
-        end_h = sully.get("typical_end_hour") or 0
-        self.sully_start.set_value(f"{start_h:02d}:00")
-        self.sully_end.set_value(f"{end_h:02d}:00")
-
-        # Content
-        games = sully.get("games_played_30d", 0)
-        self.sully_games.set_value(str(games))
-
-        main_pct = sully.get("main_game_pct")
-        self.sully_main.set_value(f"{main_pct}%" if main_pct is not None else "—")
-
-        raid = sully.get("raid_frequency")
-        self.sully_raid.set_value(f"{raid}%" if raid is not None else "—")
-
-        # Trends
-        t7d = sully.get("trend_7d", "Stable")
-        t7d_pct = sully.get("trend_7d_pct", 0)
-        arrow7 = "↗" if t7d == "Rising" else ("↘" if t7d == "Declining" else "→")
-        self.sully_trend_7d.set_value(f"{arrow7} {t7d_pct:+.1f}%")
-        self.sully_trend_7d.set_color("#72d6a0" if t7d == "Rising" else ("#ff7777" if t7d == "Declining" else "#ffaa00"))
-
-        t30d = sully.get("trend_30d", "Stable")
-        t30d_pct = sully.get("trend_30d_pct", 0)
-        arrow30 = "↗" if t30d == "Rising" else ("↘" if t30d == "Declining" else "→")
-        self.sully_trend_30d.set_value(f"{arrow30} {t30d_pct:+.1f}%")
-        self.sully_trend_30d.set_color("#72d6a0" if t30d == "Rising" else ("#ff7777" if t30d == "Declining" else "#ffaa00"))
-
-        best = sully.get("best_day", "—")
-        self.sully_best_day.set_value(best)
-
-        # Followers & Chat
+        # Followers (always shown in both M and S)
         followers = sully.get("follower_count", 0)
-        self.sully_followers.set_value(f"{followers:,}")
+        self._set_cell("sully_followers", f"{followers:,}")
 
-        fg = sully.get("follower_growth_30d")
-        self.sully_follower_growth.set_value(f"{fg:+.1f}%" if fg is not None else "—")
-        self.sully_follower_growth.set_color("#72d6a0" if (fg or 0) > 0 else ("#ff7777" if (fg or 0) < 0 else "#f2f2f2"))
+        # --- M-only cells ---
+        if self.size_variant == SizeVariant.M:
+            freq = sully.get("stream_frequency") or 0
+            self._set_cell("sully_freq", f"{freq:.0f}h/wk")
 
-        chat = sully.get("chat_activity", "—")
-        self.sully_chat.set_value(chat)
-        chat_color = "#72d6a0" if chat == "High" else ("#ffaa00" if chat == "Medium" else "#6b6b80")
-        self.sully_chat.set_color(chat_color)
+            dur = sully.get("avg_stream_duration", 0)
+            self._set_cell("sully_duration", f"{dur:.1f}h")
+
+            start_h = sully.get("typical_start_hour") or 0
+            end_h = sully.get("typical_end_hour") or 0
+            self._set_cell("sully_start", f"{start_h:02d}:00")
+            self._set_cell("sully_end", f"{end_h:02d}:00")
+
+            games = sully.get("games_played_30d", 0)
+            self._set_cell("sully_games", str(games))
+
+            main_pct = sully.get("main_game_pct")
+            self._set_cell("sully_main", f"{main_pct}%" if main_pct is not None else "—")
+
+            raid = sully.get("raid_frequency")
+            self._set_cell("sully_raid", f"{raid}%" if raid is not None else "—")
+
+            fg = sully.get("follower_growth_30d")
+            self._set_cell("sully_follower_growth", f"{fg:+.1f}%" if fg is not None else "—")
+            self._set_cell_color("sully_follower_growth",
+                "#72d6a0" if (fg or 0) > 0 else ("#ff7777" if (fg or 0) < 0 else "#f2f2f2"))
+
+            chat = sully.get("chat_activity", "—")
+            self._set_cell("sully_chat", chat)
+            chat_color = "#72d6a0" if chat == "High" else ("#ffaa00" if chat == "Medium" else "#6b6b80")
+            self._set_cell_color("sully_chat", chat_color)
+
+            # Trends
+            t7d = sully.get("trend_7d", "Stable")
+            t7d_pct = sully.get("trend_7d_pct", 0)
+            arrow7 = "↗" if t7d == "Rising" else ("↘" if t7d == "Declining" else "→")
+            self._set_cell("sully_trend_7d", f"{arrow7} {t7d_pct:+.1f}%")
+            self._set_cell_color("sully_trend_7d",
+                "#72d6a0" if t7d == "Rising" else ("#ff7777" if t7d == "Declining" else "#ffaa00"))
+
+            t30d = sully.get("trend_30d", "Stable")
+            t30d_pct = sully.get("trend_30d_pct", 0)
+            arrow30 = "↗" if t30d == "Rising" else ("↘" if t30d == "Declining" else "→")
+            self._set_cell("sully_trend_30d", f"{arrow30} {t30d_pct:+.1f}%")
+            self._set_cell_color("sully_trend_30d",
+                "#72d6a0" if t30d == "Rising" else ("#ff7777" if t30d == "Declining" else "#ffaa00"))
+
+            best = sully.get("best_day", "—")
+            self._set_cell("sully_best_day", best)
 
         # Score bars
-        cons = sully.get("consistency_score", 0)
-        self.sully_consistency_bar.set_value(cons)
-
-        rel = sully.get("reliability_score", 0)
-        self.sully_reliability_bar.set_value(rel)
-
-        disc = sully.get("discovery_score", 0)
-        self.sully_discovery_bar.set_value(disc)
+        self._set_bar("sully_consistency_bar", sully.get("consistency_score", 0))
+        self._set_bar("sully_reliability_bar", sully.get("reliability_score", 0))
+        self._set_bar("sully_discovery_bar", sully.get("discovery_score", 0))
 
         score = analysis.get("score", 0) if analysis else 0
-        self.sully_score_bar.set_value(score)
-        self.sully_score_bar.set_format(f"★ {int(score)} / 100")
+        self._set_bar("sully_score_bar", score)
+        if "sully_score_bar" in self._bars:
+            self._bars["sully_score_bar"].set_format(f"★ {int(score)} / 100")
+
+    def _set_cell(self, attr, value):
+        cell = self._cells.get(attr) or getattr(self, attr, None)
+        if cell:
+            cell.set_value(value)
+
+    def _set_cell_color(self, attr, color_hex):
+        cell = self._cells.get(attr) or getattr(self, attr, None)
+        if cell:
+            cell.set_color(color_hex)
+
+    def _set_bar(self, attr, value):
+        bar = self._bars.get(attr) or getattr(self, attr, None)
+        if bar:
+            bar.set_value(value)
 
     def _clear(self):
+        for cell in self._cells.values():
+            cell.set_value("—")
+            cell.set_color("#f2f2f2")
+        # Also clear any cells set via setattr (M-only)
         for attr in [
             "sully_avg", "sully_peak", "sully_growth", "sully_rank",
             "sully_freq", "sully_duration", "sully_start", "sully_end",
@@ -310,15 +323,17 @@ class SullyGooseWidget(QFrame):
             "sully_trend_7d", "sully_trend_30d", "sully_best_day",
         ]:
             cell = getattr(self, attr, None)
-            if cell:
+            if cell and hasattr(cell, "set_value"):
                 cell.set_value("—")
                 cell.set_color("#f2f2f2")
 
+        for bar in self._bars.values():
+            bar.set_value(0)
         for attr in [
             "sully_consistency_bar", "sully_reliability_bar",
             "sully_discovery_bar", "sully_score_bar",
         ]:
             bar = getattr(self, attr, None)
-            if bar:
+            if bar and hasattr(bar, "set_value"):
                 bar.set_value(0)
                 bar.set_format("—")

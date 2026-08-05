@@ -37,7 +37,7 @@ class AnalyticsEngine:
         self,
         viewer_tracker=None,
         sullygoose_api=None,
-        fetch_failure_cooldown=300,
+        fetch_failure_cooldown=60,
         on_analytics_updated=None
     ):
 
@@ -276,38 +276,42 @@ class AnalyticsEngine:
                 if stats:
                     with self._cache_lock:
                         self._sully_cache[fetch_key] = stats
-                    # Save to database for next startup.
                     store_sg(login, stats, platform=platform)
                     debug(f"[ANALYTICS] Stored SullyGoose data for '{login}' ({platform}): {len(stats)} metrics")
-                    # Only notify UI if this channel is the one currently being watched.
-                    # Without this guard, a SullyGoose fetch completing for any channel
-                    # would overwrite the panel with stale data.
                     if self._on_analytics_updated:
                         with self._stream_lock:
                             current = self.current_stream
+                            last = dict(self.last_analysis)
+                        if current is None:
+                            current = {"user_login": login, "user_name": login}
                         current_login = (
                             (current.get("user_login") or current.get("user_name") or "")
                             .lower().strip()
                         )
                         if current_login and login.lower().strip() != current_login:
-                            debug(f"[ANALYTICS] Fetch complete for '{login}' but current is '{current_login}' — skipping UI update")
+                            debug(f"[ANALYTICS] Fetch for '{login}' — current is '{current_login}', skipping UI update")
                         else:
-                            debug(f"[ANALYTICS] Fetch complete for '{login}' — triggering UI update")
-                            # Build a fresh analysis from the current stream
-                            # WITHOUT calling update_stream() (which would re-enter
-                            # collect_external_data and potentially re-fetch).
-                            stream = current or {"user_login": login, "user_name": login}
-                            analysis = {
+                            debug(f"[ANALYTICS] Fetch for '{login}' — triggering UI update ({len(stats)} metrics)")
+                            stream = current
+                            analysis = dict(last) if last else {
                                 "channel": stream.get("user_name") or stream.get("user_login") or login,
                                 "viewers": int(stream.get("viewer_count", 0)),
                                 "category": stream.get("game_name") or "Unknown",
                                 "title": stream.get("title", ""),
-                                "sullygoose": stats,
                             }
+                            analysis["sullygoose"] = stats
                             analysis["score"] = self.calculate_score(analysis)
+                            growth = stats.get("viewer_growth") or 0
+                            analysis["percent"] = growth
+                            analysis["status"] = (
+                                "Rising" if growth > 10
+                                else ("Declining" if growth < -5 else "Stable")
+                            )
+                            debug(f"[ANALYTICS] Calling _on_analytics_updated for '{login}'")
                             self._on_analytics_updated(stream, analysis)
+                            debug(f"[ANALYTICS] _on_analytics_updated returned for '{login}'")
                 else:
-                    # Failed or empty — record failure timestamp for cooldown.
+                    debug(f"[ANALYTICS] Fetch returned no data for '{login}'")
                     with self._cache_lock:
                         self._failed_fetches[fetch_key] = time.time()
                         self._prune_failed_fetches()

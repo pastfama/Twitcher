@@ -195,32 +195,14 @@ class CurrentWatchingUIBuilder:
         top_row.addWidget(lcd_container, 1)
         layout.addLayout(top_row)
 
-        # Viewer history graph - uses GRAPH_HEIGHT constant
+        # Viewer history graph - taller for better visual impact
         self.panel.viewer_history_graph = ViewerHistoryGraph()
-        self.panel.viewer_history_graph.setFixedHeight(GRAPH_HEIGHT)
+        self.panel.viewer_history_graph.setFixedHeight(50)
         layout.addWidget(self.panel.viewer_history_graph)
-
-        # Neon indicators at bottom
-        indicators_row = QHBoxLayout()
-        indicators_row.setSpacing(4)
-        indicators_row.addStretch()
-
-        self.panel.neon_viewer_counter = NeonIndicator("VIEWERS", Theme.CYAN)
-        self.panel.light_live = NeonIndicator("LIVE", Theme.RED)
-        self.panel.light_chat = NeonIndicator("CHAT", Theme.CYAN)
-        self.panel.light_raid = NeonIndicator("RAID", Theme.ORANGE)
-
-        indicators_row.addWidget(self.panel.neon_viewer_counter)
-        indicators_row.addWidget(self.panel.light_live)
-        indicators_row.addWidget(self.panel.light_chat)
-        indicators_row.addWidget(self.panel.light_raid)
-        indicators_row.addStretch()
-
-        layout.addLayout(indicators_row)
 
     def _build_sg_section(self, layout):
         """SG widget for right side (green box): SullyGoose analytics grid.
-        
+
         Uses SullyGooseWidget which has its own size constants defined in
         widgets.sullygoose module (METRIC_CELL_HEIGHT, SCORE_BAR_WIDTH, etc.)
         """

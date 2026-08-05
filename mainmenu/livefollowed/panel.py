@@ -55,77 +55,23 @@ class LiveFollowedPanel(QGroupBox):
         self.add_platform_combo.addItem("Twitch", "twitch")
         self.add_platform_combo.addItem("Kick", "kick")
         self.add_platform_combo.addItem("YouTube", "youtube")
-        self.add_platform_combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: {Theme.DARK_PANEL};
-                color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.SECTION_BORDER};
-                border-radius: 4px;
-                padding: 4px 6px;
-                font-size: 11px;
-            }}
-        """)
+        self.add_platform_combo.setStyleSheet(Theme.platform_combo_style())
         self.add_platform_combo.setFixedWidth(80)
         add_row.addWidget(self.add_platform_combo)
 
         self.add_channel_input = QLineEdit()
         self.add_channel_input.setPlaceholderText("Add channel (e.g. xqc, @handle)...")
-        self.add_channel_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {Theme.DARK_PANEL};
-                color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.SECTION_BORDER};
-                border-radius: 4px;
-                padding: 6px 10px;
-                font-size: 11px;
-            }}
-            QLineEdit:focus {{
-                border: 1px solid {Theme.CYAN};
-            }}
-        """)
+        self.add_channel_input.setStyleSheet(Theme.search_input_style())
         self.add_channel_input.returnPressed.connect(self._on_add_channel)
         add_row.addWidget(self.add_channel_input, 1)
 
         self.add_button = QPushButton("+")
         self.add_button.setToolTip("Add channel to watchlist")
-        self.add_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.AVATAR_BG};
-                color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.SECTION_BORDER};
-                border-radius: 4px;
-                padding: 4px 10px;
-                font-size: 12px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.CYAN};
-                color: #000000;
-            }}
-        """)
+        self.add_button.setStyleSheet(Theme.add_button_style())
         self.add_button.clicked.connect(self._on_add_channel)
         add_row.addWidget(self.add_button)
 
         layout.addLayout(add_row)
-
-        # --- Search/filter bar ---
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search channels...")
-        self.search_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {Theme.DARK_PANEL};
-                color: {Theme.TEXT_PRIMARY};
-                border: 1px solid {Theme.SECTION_BORDER};
-                border-radius: 4px;
-                padding: 6px 10px;
-                font-size: 11px;
-            }}
-            QLineEdit:focus {{
-                border: 1px solid {Theme.CYAN};
-            }}
-        """)
-        self.search_input.textChanged.connect(self._on_search_changed)
-        layout.addWidget(self.search_input)
 
         # --- Column headers ---
         headers_row = QHBoxLayout()
@@ -300,21 +246,12 @@ class LiveFollowedPanel(QGroupBox):
 
         # --- Platform badge ---
         platform = stream.get("platform", "twitch")
-        badge_colors = {
-            "twitch": "#9146FF",
-            "kick": "#53FC18",
-            "youtube": "#FF0000",
-        }
-        badge_color = badge_colors.get(platform, "#888888")
+        badge_color = Theme.BADGE_COLORS.get(platform, "#888888")
         badge_label = QLabel(platform.upper())
-        badge_label.setStyleSheet(f"""
-            color: {badge_color};
-            font-size: 8px;
-            font-weight: bold;
-            border: 1px solid {badge_color};
-            border-radius: 3px;
-            padding: 1px 4px;
-        """)
+        badge_label.setStyleSheet(
+            f"color: {badge_color}; font-size: 8px; font-weight: bold; "
+            f"border: 1px solid {badge_color}; border-radius: 3px; padding: 1px 4px;"
+        )
         badge_label.setFixedWidth(52)
         layout.addWidget(badge_label)
 
@@ -352,9 +289,10 @@ class LiveFollowedPanel(QGroupBox):
         if self._analytics and login:
             sully = self._analytics.sullygoose_for(login, viewers, platform=platform) or {}
         if sully:
-            growth = sully.get("viewer_growth", 0)
+            growth = sully.get("viewer_growth")
             if growth is not None:
                 growth_parts.append(f"{growth:+.1f}%")
+            # If growth is None, don't add anything — show "--" fallback
 
         growth_text = growth_parts[0] if growth_parts else "--"
         growth_label = QLabel(growth_text)
