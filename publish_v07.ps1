@@ -78,10 +78,18 @@ try {
     Write-Host "[OK] Using existing release: $($rel.html_url)"
 }
 
-# --- Upload Watcher.exe asset ---
+# --- Upload Watcher.exe asset (delete existing first so re-publish works) ---
 $exePath = Join-Path $root "dist\Watcher.exe"
 if (-not (Test-Path $exePath)) { Write-Host "ERROR: $exePath not found"; exit 1 }
 Write-Host "`n[Upload] Attaching Watcher.exe ($([math]::Round((Get-Item $exePath).Length/1MB,1)) MB)..."
+# Delete any existing Watcher.exe asset on the release (GitHub rejects duplicate names).
+$existingAssets = Invoke-RestMethod -Uri "$api/releases/$($rel.id)/assets" -Headers $headers
+foreach ($asset in $existingAssets) {
+    if ($asset.name -eq "Watcher.exe") {
+        Write-Host "[OK] Deleting existing asset: $($asset.name)"
+        Invoke-RestMethod -Uri "$api/releases/assets/$($asset.id)" -Method Delete -Headers $headers | Out-Null
+    }
+}
 $uploadUrl = ($rel.upload_url -replace "{.*}", "") + "?name=Watcher.exe"
 $uploadResult = curl.exe -s -L -H "Authorization: token $token" -H "Content-Type: application/octet-stream" --data-binary "@dist/Watcher.exe" $uploadUrl
 if ($uploadResult -match '"browser_download_url"\s*:\s*"([^"]+)"') {
