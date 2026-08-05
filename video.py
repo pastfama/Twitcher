@@ -38,8 +38,8 @@ from core.stream_resolver import resolve_stream_url, StreamResolverError
 # CONFIGURATION
 # ============================================================
 
-APP_ORGANIZATION = "Twitcher"
-APP_NAME = "TwitcherVideoWindow"
+APP_ORGANIZATION = "Watcher"
+APP_NAME = "WatcherVideoWindow"
 
 DEFAULT_VOLUME = 38
 
@@ -95,7 +95,7 @@ class VideoWindow(QWidget):
         # ====================================================
 
         self.setWindowTitle(
-            "TWITCHER // STREAM MONITOR"
+            "WATCHER // STREAM MONITOR"
         )
 
         self.setMinimumSize(
@@ -747,9 +747,8 @@ class VideoWindow(QWidget):
         ok = self.start_video(url)
         if ok:
             self.current_channel = channel
-            save_channel(channel)
             self.recent_channels = load_channels()
-            self.setWindowTitle(f"TWITCHER // {channel}")
+            self.setWindowTitle(f"WATCHER // {channel}")
             debug(f"[VIDEO] Now playing '{channel}' (auth-free)")
         return ok
 

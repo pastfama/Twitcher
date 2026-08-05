@@ -95,7 +95,7 @@ class IRCClient(QObject):
         }
 
         self._irc = irc3.IrcBot(**config)
-        self._irc._twitcher_client = self
+        self._irc._watcher_client = self
         self._irc.include(_twitch_plugin)
 
         loop = get_loop()
@@ -148,7 +148,7 @@ class IRCClient(QObject):
 def _twitch_plugin(bot):
     """irc3 plugin factory that bridges events to IRCClient signals."""
 
-    client = getattr(bot, "_twitcher_client", None)
+    client = getattr(bot, "_watcher_client", None)
 
     @irc3.event(irc3.rfc.PRIVMSG)
     def on_privmsg(target, event):

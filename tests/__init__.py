@@ -1,4 +1,4 @@
-"""Test package for Twitcher.
+"""Test package for Watcher.
 
 Adds the project root to sys.path so test scripts can import
 root-level modules (api, chat, logger, etc.) when run from tests/.

@@ -1,4 +1,4 @@
-"""Twitcher dashboard panel components (CustomTkinter ports of mainmenu/*).
+"""Watcher dashboard panel components (CustomTkinter ports of mainmenu/*).
 Re-export the panel classes so ``from gui.panels import ...`` works.
 """
 from gui.panels.next_stream import NextStreamPanel

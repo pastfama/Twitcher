@@ -104,10 +104,10 @@ def get_never_request_scopes():
 
 
 def get_request_scopes():
-    """Get the list of scopes that Twitcher needs.
+    """Get the list of scopes that Watcher needs.
     
     Returns:
-        list: Scopes that Twitcher should request
+        list: Scopes that Watcher should request
     """
     config = load_config()
     return config.get('scopes', {}).get('request', [])

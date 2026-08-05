@@ -1,12 +1,13 @@
-"""Auth-free Twitch stream URL resolver.
+"""Multi-platform stream URL resolver.
 
-Uses Streamlink's public stream API — NO Twitch OAuth token required.
-Playback of public Twitch streams works for anyone; only chat/API
-features need a token.
+Uses Streamlink for Twitch/YouTube and platform APIs for Kick.
+Supports: Twitch, Kick, YouTube
 """
 
 import os
 import subprocess
+
+from platforms.base import PlatformError
 
 STREAMLINK_PATH = r"C:\Program Files\Streamlink\bin\streamlink.exe"
 
@@ -19,29 +20,30 @@ def normalize_channel(channel):
     return str(channel).strip().lower().lstrip("#")
 
 
-def resolve_stream_url(channel):
-    """Return a playable URL for *channel* using Streamlink (no auth)."""
-    channel = normalize_channel(channel)
-    if not channel:
-        raise StreamResolverError("Empty channel name.")
-    if not os.path.exists(STREAMLINK_PATH):
-        raise StreamResolverError(
-            f"Streamlink was not found.\n\nExpected:\n{STREAMLINK_PATH}"
-        )
-    result = subprocess.run(
-        [STREAMLINK_PATH, f"twitch.tv/{channel}", "best", "--stream-url"],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    if result.returncode != 0:
-        raise StreamResolverError(
-            f"Streamlink could not resolve {channel}:\n\n{result.stderr}"
-        )
-    url = result.stdout.strip()
-    if not url:
-        raise StreamResolverError(f"Streamlink returned an empty URL for {channel}.")
-    return url
+def resolve_stream_url(channel, platform_name=None):
+    """Return a playable URL for *channel* using the appropriate platform.
+
+    Args:
+        channel: Channel name or URL
+        platform_name: Force a specific platform (twitch, kick, youtube),
+                       or None for auto-detection
+    """
+    from platforms import detect_platform, get_platform
+
+    if platform_name is None:
+        platform_name = detect_platform(channel)
+
+    platform_cls = get_platform(platform_name)
+    if platform_cls is None:
+        raise StreamResolverError(f"Unknown platform: {platform_name}")
+
+    platform = platform_cls()
+
+    try:
+        stream_info = platform.resolve_stream(channel)
+        return stream_info.url
+    except PlatformError as exc:
+        raise StreamResolverError(str(exc))
 
 
 def try_resolve(channels):

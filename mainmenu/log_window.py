@@ -12,7 +12,7 @@ class LogWindow(QMainWindow):
 
         self.log_file = log_file
 
-        self.setWindowTitle("Twitcher Logs")
+        self.setWindowTitle("Watcher Logs")
         self.resize(900, 600)
 
         self.text = QTextEdit()

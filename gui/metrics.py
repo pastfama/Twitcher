@@ -1,7 +1,7 @@
 """Current Watching metrics card (CustomTkinter port of
 ``mainmenu/currwatching`` CurrentWatchingPanel + UI builder).
 
-Renders *all* the live Twitcher metrics produced by
+Renders *all* the live Watcher metrics produced by
 ``core/viewer_tracker.ViewerTracker.analyze``:
 
     {
@@ -127,7 +127,7 @@ class CurrentWatchingMetricsPanel(ctk.CTkFrame):
         self.avatar.itemconfig(self._avatar_letter,
                                text=(channel[:1] or "?").upper())
 
-        # Show the emoji sentiment (🟢 Rising / 🔴 Falling / 🟡 Stable …) as Twitcher does.
+        # Show the emoji sentiment (🟢 Rising / 🔴 Falling / 🟡 Stable …) as Watcher does.
         status = analysis.get("status", "warming up")
         self.status_var.set(status)
         color = STATUS_COLORS.get(status, Theme.MUTED)

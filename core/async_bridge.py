@@ -1,6 +1,6 @@
 """Async bridge — runs an asyncio event loop in a background thread.
 
-Both ``twitchAPI`` and ``irc3`` are asyncio-based, but Twitcher's UI runs
+Both ``twitchAPI`` and ``irc3`` are asyncio-based, but Watcher's UI runs
 on the PySide6 (Qt) event loop.  This module provides a single shared
 asyncio loop running in a daemon thread, plus helpers to:
 
@@ -51,7 +51,7 @@ def get_loop() -> asyncio.AbstractEventLoop:
             _loop_thread = threading.Thread(
                 target=_run_loop,
                 args=(_loop,),
-                name="twitcher-asyncio",
+                name="watcher-asyncio",
                 daemon=True,
             )
             _loop_thread.start()

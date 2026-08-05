@@ -93,14 +93,16 @@ class CurrentWatchingPanel(QFrame):
         status = analysis.get("status", "")
         percent = analysis.get("percent") or 0
 
-        # Visible debug: change color to confirm callback is firing
-        has_sully = bool(analysis.get("sullygoose"))
-        if has_sully:
-            self.momentum_label.setStyleSheet("color: #00ff00; font-size: 11px; font-weight: bold;")
+        # Color-code momentum based on trend direction.
+        if status == "Rising":
+            color = "#00ff00"
+        elif status == "Declining":
+            color = "#ff4444"
         else:
-            self.momentum_label.setStyleSheet("color: #ff0000; font-size: 11px; font-weight: bold;")
+            color = "#f2f2f2"
+        self.momentum_label.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: bold;")
 
-        self.momentum_label.setText(f"{status} {percent:+}% {'✅SG' if has_sully else '❌NoSG'}")
+        self.momentum_label.setText(f"{status} {percent:+.1f}%")
 
         # Update mini gauge with momentum.
         # Map percent (-50 to +50) to gauge scale (0 to 100).
@@ -198,7 +200,7 @@ class CurrentWatchingPanel(QFrame):
     # ============================================================
 
     def refresh_momsg(self, stream, analysis):
-        """Refresh MOM and SG widgets every 4 seconds via TimeBoss.
+        """Refresh MOM and SG widgets every 4 seconds via timer.
         
         Updates:
         - MOM gauge (momentum), LCD (viewer count), graph (history)
@@ -227,15 +229,17 @@ class CurrentWatchingPanel(QFrame):
         if analysis:
             status = analysis.get("status", "")
             percent = analysis.get("percent") or 0
-            has_sully = bool(analysis.get("sullygoose"))
 
-            # Visual debug indicator
-            if has_sully:
-                self.momentum_label.setStyleSheet("color: #00ff00; font-size: 11px; font-weight: bold;")
+            # Color-code momentum based on trend direction.
+            if status == "Rising":
+                color = "#00ff00"
+            elif status == "Declining":
+                color = "#ff4444"
             else:
-                self.momentum_label.setStyleSheet("color: #ff0000; font-size: 11px; font-weight: bold;")
+                color = "#f2f2f2"
+            self.momentum_label.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: bold;")
 
-            self.momentum_label.setText(f"{status} {percent:+}% {'✅SG' if has_sully else '❌NoSG'}")
+            self.momentum_label.setText(f"{status} {percent:+.1f}%")
 
             # Update gauge
             gauge_value = max(0, min(100, int(percent + 50)))

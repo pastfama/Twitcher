@@ -20,7 +20,6 @@ class MainMenuStreamState:
                 channels = channels + [self.current_stream]
         from logger import debug
         debug(f"[CHANNEL STATE] _fetch_live_channels: live_channels={len(self.live_channels or [])}, current_stream={current_login}, returning={len(channels)}")
-        print(f"[CHANNEL STATE] _fetch_live_channels: live_channels={len(self.live_channels or [])}, current_stream={current_login}, returning={len(channels)}")
         return channels
 
     def load_twitch(self):
@@ -43,16 +42,6 @@ class MainMenuStreamState:
 
         self.user = user or {}
 
-        self.connection_label.setText("CONNECTED")
-
-        self.connection_label.setStyleSheet(f"""
-            color: #72d6a0;
-            background-color: {Theme.DARK_PANEL};
-            border: 1px solid #72d6a0;
-            border-radius: 4px;
-            padding: 4px 10px;
-        """)
-
         self.log(
             f"Logged in as {self.user.get('display_name', 'unknown')}"
         )
@@ -73,16 +62,6 @@ class MainMenuStreamState:
 
         if self.is_closing:
             return
-
-        self.connection_label.setText("ERROR")
-
-        self.connection_label.setStyleSheet(f"""
-            color: {Theme.RED_DARK};
-            background-color: {Theme.DARK_PANEL};
-            border: 1px solid {Theme.RED_DARK};
-            border-radius: 4px;
-            padding: 4px 10px;
-        """)
 
         self.dispatcher_panel.set_status(
             "Twitch connection error"
@@ -126,14 +105,48 @@ class MainMenuStreamState:
 
 
         def fetch():
+            # Fetch from all platforms
+            all_live = []
 
-            followed = self.api.get_followed_channels(
-                user_id
-            )
+            # Twitch (primary)
+            try:
+                followed = self.api.get_followed_channels(
+                    user_id
+                )
+                twitch_live = self.api.get_live_streams(
+                    followed
+                )
+                for stream in twitch_live:
+                    stream["platform"] = "twitch"
+                all_live.extend(twitch_live)
+            except Exception as e:
+                self.log(f"[LIVE] Twitch error: {e}")
 
-            return self.api.get_live_streams(
-                followed
-            )
+            # Kick (if platform manager available)
+            try:
+                from platforms import get_platform_manager
+                pm = get_platform_manager()
+                if pm.kick:
+                    kick_live = pm.kick.get_live_streams([])
+                    for stream in kick_live:
+                        stream["platform"] = "kick"
+                    all_live.extend(kick_live)
+            except Exception as e:
+                self.log(f"[LIVE] Kick error: {e}")
+
+            # YouTube (if platform manager available)
+            try:
+                from platforms import get_platform_manager
+                pm = get_platform_manager()
+                if pm.youtube:
+                    youtube_live = pm.youtube.get_live_streams([])
+                    for stream in youtube_live:
+                        stream["platform"] = "youtube"
+                    all_live.extend(youtube_live)
+            except Exception as e:
+                self.log(f"[LIVE] YouTube error: {e}")
+
+            return all_live
 
 
         self._run_background(
@@ -623,9 +636,7 @@ class MainMenuStreamState:
         )
 
 
-        self.raid_monitor.start(
-            self.time_boss
-        )
+        self.raid_monitor.start()
 
 
         self.dispatcher_panel.set_status(
@@ -672,9 +683,7 @@ class MainMenuStreamState:
     def stop_video(self):
 
         try:
-            self.raid_monitor.stop(
-                self.time_boss
-            )
+            self.raid_monitor.stop()
 
         except Exception:
             pass

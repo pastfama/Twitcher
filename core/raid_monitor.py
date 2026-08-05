@@ -1,8 +1,7 @@
-"""Raid monitor driven by the central TimeBoss via EventSub websocket.
+"""Raid monitor — watches for Twitch raids via EventSub websocket.
 
-All blocking work happens on the thread pool.  The websocket connection
-is managed by the TimeBoss cycle; the monitor only registers interest
-and receives events through signals.
+All blocking work happens on daemon threads. Has its own QTimer
+for periodic reconnection checks.
 """
 
 import asyncio
@@ -13,7 +12,7 @@ import time
 
 import websockets
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 
 logger = logging.getLogger(__name__)
@@ -28,11 +27,10 @@ class RaidSignals(QObject):
 class RaidMonitor(QObject):
     """Monitor Twitch raids via EventSub websocket.
 
-    Lifecycle is controlled by the app's TimeBoss: :meth:`tick` is
-    called on every refresh cycle and manages the websocket connection.
+    Has its own QTimer for periodic reconnection checks.
     """
 
-    def __init__(self, api, reconnect_delay=5):
+    def __init__(self, api, reconnect_delay=5, check_interval_ms=300000):
         super().__init__()
         self.api = api
         self.reconnect_delay = reconnect_delay
@@ -47,26 +45,28 @@ class RaidMonitor(QObject):
         self._lock = threading.Lock()
         self._last_connect = 0
 
-    # ================================================================
-    # TIME-BOSS INTERFACE
-    # ================================================================
+        # Timer for periodic reconnection checks
+        self._timer = QTimer(self)
+        self._timer.setInterval(check_interval_ms)
+        self._timer.timeout.connect(self._on_tick)
 
-    def start(self, time_boss):
-        """Register with TimeBoss."""
-        time_boss.register("raid_monitor", self.tick)
+    def start(self):
+        """Start the raid monitor."""
+        self._timer.start()
+        logger.debug("[RAID MONITOR] Started")
 
-    def stop(self, time_boss):
-        """Unregister and close websocket."""
-        time_boss.unregister("raid_monitor", self.tick)
+    def stop(self):
+        """Stop the raid monitor."""
+        self._timer.stop()
         self._close()
+        logger.debug("[RAID MONITOR] Stopped")
 
-    def tick(self):
-        """Called by TimeBoss on every refresh cycle."""
+    def _on_tick(self):
+        """Called on every timer tick to check/reconnect websocket."""
         if self._stop_event.is_set():
             return
         if not self.current_channel:
             return
-        # Reconnect periodically to keep the websocket fresh.
         now = time.monotonic()
         if self._ws is None or now - self._last_connect > 300:
             self._launch_ws()
@@ -96,9 +96,7 @@ class RaidMonitor(QObject):
             self._close()
 
     async def _connect(self):
-        url = (
-            "wss://eventsub.wss.twitch.tv/ws"
-        )
+        url = "wss://eventsub.wss.twitch.tv/ws"
         try:
             async with websockets.connect(url) as ws:
                 self._ws = ws
@@ -134,6 +132,13 @@ class RaidMonitor(QObject):
             pass
 
     def _close(self):
+        ws = None
+        loop = None
         with self._lock:
+            ws = self._ws
+            loop = self._loop
             self._ws = None
+            self._loop = None
         self._stop_event.set()
+        if ws is not None and loop is not None and loop.is_running():
+            asyncio.run_coroutine_threadsafe(ws.close(), loop)

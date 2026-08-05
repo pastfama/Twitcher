@@ -16,10 +16,12 @@ import time
 from logger import debug
 from core.db import get_sg, store_sg, list_sg_channels
 
+# Maximum number of failed-fetch entries to keep before pruning.
+_MAX_FAILED_FETCHES = 200
+
 
 class AnalyticsEngine:
-    """
-    Central intelligence layer for Twitcher.
+    """Central intelligence layer for Watcher.
 
     Data sources:
     - ViewerTracker (local realtime)
@@ -54,6 +56,7 @@ class AnalyticsEngine:
 
         self.sullygoose_api = sullygoose_api
 
+        self._stream_lock = threading.Lock()
         self.current_stream = None
         self.last_analysis = {}
         self._sully_cache = {}
@@ -63,7 +66,7 @@ class AnalyticsEngine:
         self._failed_fetches = {}  # login -> last failure timestamp
         self._on_analytics_updated = on_analytics_updated
 
-        # Pre-load cached SG data from local JSON file.
+        # Pre-load cached SG data from database.
         self._load_cached_data()
 
 
@@ -87,40 +90,50 @@ class AnalyticsEngine:
 
         if not stream:
 
-            self.current_stream = None
-            self.last_analysis = {}
+            with self._stream_lock:
+                self.current_stream = None
+                self.last_analysis = {}
 
             return None
 
-        self.current_stream = stream
+        with self._stream_lock:
+            self.current_stream = stream
+
+        # Support field names from all platforms:
+        # - Twitch: user_name, user_login, game_name, viewer_count
+        # - Kick: channel, game, viewer_count
+        # - YouTube: channel, game, viewer_count
+        platform = stream.get("platform", "twitch")
+
+        channel_name = (
+            stream.get("user_name")
+            or stream.get("user_login")
+            or stream.get("channel")
+            or "Unknown"
+        )
+
+        category = (
+            stream.get("game_name")
+            or stream.get("game")
+            or "Unknown"
+        )
 
         analysis = {
-            "channel": (
-                stream.get("user_name")
-                or stream.get("user_login")
-                or "Unknown"
-            ),
-
+            "channel": channel_name,
+            "platform": platform,
             "viewers": int(
                 stream.get(
                     "viewer_count",
                     0
                 )
             ),
-
-            "category": (
-                stream.get(
-                    "game_name"
-                )
-                or "Unknown"
-            ),
-
+            "category": category,
             "title": (
                 stream.get(
                     "title",
                     ""
                 )
-            )
+            ),
         }
 
         # ------------------------------------------------
@@ -157,7 +170,8 @@ class AnalyticsEngine:
         # Derive momentum status from SullyGoose growth
         # ------------------------------------------------
 
-        sully = analysis.get("sullygoose", {}) or {}
+        with self._stream_lock:
+            sully = analysis.get("sullygoose", {}) or {}
         if sully:
             growth = sully.get("viewer_growth")
             if growth is None:
@@ -180,7 +194,8 @@ class AnalyticsEngine:
             )
         )
 
-        self.last_analysis = analysis
+        with self._stream_lock:
+            self.last_analysis = analysis
 
         return analysis
 
@@ -189,22 +204,26 @@ class AnalyticsEngine:
     # ========================================================
 
     def collect_external_data(self):
-        """
-        Read-only SullyGoose analytics (cache-only, never network on GUI thread).
+        """Read-only SullyGoose analytics (cache-only, never network on GUI thread).
 
         Kicks off a background fetch if the channel is not cached yet, then
         returns whatever is cached right now (possibly nothing).
         """
-        if not self.current_stream:
+        with self._stream_lock:
+            current = self.current_stream
+
+        if not current:
             return {}
 
         channel_name = (
-            self.current_stream.get("user_login")
-            or self.current_stream.get("user_name")
+            current.get("user_login")
+            or current.get("user_name")
+            or current.get("channel")
             or "unknown"
         ).lower()
 
-        sully = self.sullygoose_for(channel_name)
+        platform = current.get("platform", "twitch")
+        sully = self.sullygoose_for(channel_name, platform=platform)
         if not sully:
             return {}
 
@@ -212,7 +231,7 @@ class AnalyticsEngine:
             "sullygoose": sully
         }
 
-    def sullygoose_for(self, login, viewers=None):
+    def sullygoose_for(self, login, viewers=None, platform="twitch"):
         """Return cached SullyGoose analytics for *login*, or ``None``.
 
         NEVER performs network I/O. If the channel is not cached yet,
@@ -222,61 +241,73 @@ class AnalyticsEngine:
         if not login:
             return None
 
+        cache_key = f"{platform}:{login}"
+
         with self._cache_lock:
-            cached = self._sully_cache.get(login)
+            cached = self._sully_cache.get(cache_key)
             if cached is not None:
                 return cached
 
-        self._ensure_async_fetch(login)
+        self._ensure_async_fetch(login, platform=platform)
         return None
 
-    def _ensure_async_fetch(self, login):
+    def _ensure_async_fetch(self, login, platform="twitch"):
         """Start a daemon thread to fetch *login* stats if not already in-flight."""
+        fetch_key = f"{platform}:{login}"
         with self._cache_lock:
-            if login in self._pending_fetches:
-                debug(f"[ANALYTICS] Fetch already pending for '{login}'")
+            if fetch_key in self._pending_fetches:
+                debug(f"[ANALYTICS] Fetch already pending for '{login}' ({platform})")
                 return
             # Don't retry a recently-failed fetch on every tick.
-            last_fail = self._failed_fetches.get(login)
+            last_fail = self._failed_fetches.get(fetch_key)
             if last_fail is not None:
                 if time.time() - last_fail < self._fetch_failure_cooldown:
-                    debug(f"[ANALYTICS] Skipping '{login}' (recent failure, cooldown)")
+                    debug(f"[ANALYTICS] Skipping '{login}' ({platform}) (recent failure, cooldown)")
                     return
-            self._pending_fetches.add(login)
+            self._pending_fetches.add(fetch_key)
 
-        debug(f"[ANALYTICS] Starting background sullygnome fetch for '{login}'")
+        debug(f"[ANALYTICS] Starting background sullygnome fetch for '{login}' ({platform})")
 
         def worker():
             try:
-                stats = self.sullygoose_api.get_channel_stats(login)
+                stats = self.sullygoose_api.get_channel_stats(login, platform=platform)
                 debug(f"[ANALYTICS] Background fetch complete for '{login}': {stats is not None}")
                 if stats:
                     with self._cache_lock:
-                        self._sully_cache[login] = stats
+                        self._sully_cache[fetch_key] = stats
                     # Save to database for next startup.
                     store_sg(login, stats)
-                    debug(f"[ANALYTICS] Stored SullyGoose data for '{login}': {len(stats)} metrics")
+                    debug(f"[ANALYTICS] Stored SullyGoose data for '{login}' ({platform}): {len(stats)} metrics")
                     # Always notify UI — let the UI decide whether to use it.
                     if self._on_analytics_updated:
                         debug(f"[ANALYTICS] Fetch complete for '{login}' — triggering UI update")
-                        # Create a minimal stream dict if current_stream is None
-                        stream = self.current_stream or {"user_login": login, "user_name": login}
-                        analysis = self.update_stream(stream)
-                        # Ensure the freshly-fetched data is in the analysis
-                        if stats and "sullygoose" not in analysis:
-                            analysis["sullygoose"] = stats
+                        # Build a fresh analysis from the current stream
+                        # WITHOUT calling update_stream() (which would re-enter
+                        # collect_external_data and potentially re-fetch).
+                        with self._stream_lock:
+                            stream = self.current_stream or {"user_login": login, "user_name": login}
+                        analysis = {
+                            "channel": stream.get("user_name") or stream.get("user_login") or login,
+                            "viewers": int(stream.get("viewer_count", 0)),
+                            "category": stream.get("game_name") or "Unknown",
+                            "title": stream.get("title", ""),
+                            "sullygoose": stats,
+                        }
+                        analysis["score"] = self.calculate_score(analysis)
                         self._on_analytics_updated(stream, analysis)
                 else:
                     # Failed or empty — record failure timestamp for cooldown.
                     with self._cache_lock:
-                        self._failed_fetches[login] = time.time()
+                        self._failed_fetches[fetch_key] = time.time()
+                        self._prune_failed_fetches()
             except Exception as exc:
-                debug(f"[ANALYTICS] Background fetch error for '{login}': {exc}")
+                debug(f"[ANALYTICS] Background fetch error for '{login}' ({platform}): {exc}")
                 with self._cache_lock:
-                    self._failed_fetches[login] = time.time()
+                    self._failed_fetches[fetch_key] = time.time()
+                    self._prune_failed_fetches()
             finally:
                 with self._cache_lock:
-                    self._pending_fetches.discard(login)
+                    self._pending_fetches.discard(fetch_key)
 
         thread = threading.Thread(
             target=worker,
@@ -285,8 +316,20 @@ class AnalyticsEngine:
         )
         thread.start()
 
+    def _prune_failed_fetches(self):
+        """Remove oldest entries if _failed_fetches exceeds the cap."""
+        if len(self._failed_fetches) <= _MAX_FAILED_FETCHES:
+            return
+        # Sort by failure time and keep the most recent half.
+        sorted_logins = sorted(
+            self._failed_fetches, key=self._failed_fetches.get
+        )
+        to_remove = sorted_logins[: len(sorted_logins) // 2]
+        for login in to_remove:
+            self._failed_fetches.pop(login, None)
+
     def fetch_all_live_channels(self, channels):
-        """Fetch SullyGoose data for all live channels (called by TimeBoss).
+        """Fetch SullyGoose data for all live channels.
 
         This method does NOT block — it checks the cache first and
         starts background fetches for any uncached channels.
@@ -298,6 +341,7 @@ class AnalyticsEngine:
             login = (
                 stream.get("user_login")
                 or stream.get("user_name")
+                or stream.get("channel")
                 or ""
             ).lower()
             if login:
@@ -387,4 +431,5 @@ class AnalyticsEngine:
 
     def get_analysis(self):
 
-        return self.last_analysis or {}
+        with self._stream_lock:
+            return dict(self.last_analysis) or {}

@@ -12,19 +12,19 @@ from gui.theme import Theme, font
 from gui.metrics import CurrentWatchingMetricsPanel
 
 
-class TwitcherApp(ctk.CTk):
+class WatcherApp(ctk.CTk):
     """Root CTk window hosting the Current-Watching metrics card."""
 
     def __init__(self, metrics_provider=None, tick_ms=1000, **kw):
         super().__init__(**kw)
         ctk.set_appearance_mode("dark")
-        self.title("Twitcher — metrics demo")
+        self.title("Watcher — metrics demo")
         self._set_window_size(720, 560)
 
         # dark neon background (port of mainmenu/style.py QMainWindow bg)
         self.configure(fg_color=Theme.CARD)
 
-        header = ctk.CTkLabel(self, text="TWITCHER",
+        header = ctk.CTkLabel(self, text="WATCHER",
                               text_color=Theme.BRIGHT,
                               font=font(16, "bold"))
         header.pack(anchor="w", padx=24, pady=(18, 6))
@@ -65,5 +65,5 @@ class TwitcherApp(ctk.CTk):
 
 def run(metrics_provider=None, tick_ms=1000):
     """Entrypoint used by the demo and, later, the real app."""
-    app = TwitcherApp(metrics_provider=metrics_provider, tick_ms=tick_ms)
+    app = WatcherApp(metrics_provider=metrics_provider, tick_ms=tick_ms)
     app.mainloop()

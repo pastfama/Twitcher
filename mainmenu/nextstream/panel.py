@@ -141,7 +141,7 @@ class NextStreamPanel(QFrame):
         self.next_viewers_label.setText(f"  {viewers:,} viewers")
         self.next_category_label.setText(category)
         self.next_reason_label.setText(
-            "If the current stream ends without a raid, Twitcher will switch here."
+            "If the current stream ends without a raid, Watcher will switch here."
         )
         self.switch_button.setEnabled(True)
         self.switch_button.setStyleSheet(f"""

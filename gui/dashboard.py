@@ -1,7 +1,7 @@
 """Full DashboardApp — 3-column Control Center layout.
 
 Mirrors screenshot 2 (PySide6 original):
-  top bar  -> TWITCHER CONTROL CENTER + CONNECTED + LOGS + RE-AUTH
+  top bar  -> WATCHER CONTROL CENTER + CONNECTED + LOGS + RE-AUTH
   left col -> CurrentWatching + SullyGoose + LiveFollowed (30%)
   center   -> Chat (40%)
   right     -> NextStream + Dispatcher (30%)
@@ -26,7 +26,7 @@ class DashboardApp(ctk.CTk):
         super().__init__(**kw)
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
-        self.title("Twitcher — dashboard")
+        self.title("Watcher — dashboard")
         self._provider = provider
         self._tick_ms = tick_ms
         self._running = True
@@ -42,7 +42,7 @@ class DashboardApp(ctk.CTk):
         # top bar
         top = tk.Frame(self, bg=Theme.CARD)
         top.pack(fill="x", padx=20, pady=(12, 8))
-        tk.Label(top, text="TWITCHER",
+        tk.Label(top, text="WATCHER",
                  bg=Theme.CARD, fg=Theme.BRIGHT,
                  font=(Theme.FAMILY, 22, "bold")).pack(side="left")
         tk.Label(top, text="AUTOMATED STREAM CONTROL CENTER",

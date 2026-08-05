@@ -1,4 +1,4 @@
-"""Twitcher alternative GUI layer (CustomTkinter).
+"""Watcher alternative GUI layer (CustomTkinter).
 
 Drop-in replacement for the PySide6 ``mainmenu/*`` panels. Keeps the
 existing ``core/*`` backend intact and only translates the *view* layer.

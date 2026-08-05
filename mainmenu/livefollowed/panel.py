@@ -235,8 +235,9 @@ class LiveFollowedPanel(QGroupBox):
                 growth_parts.append(f"{percent:+.1f}%")
 
         sully = {}
+        platform = stream.get("platform", "twitch")
         if self._analytics and login:
-            sully = self._analytics.sullygoose_for(login, viewers) or {}
+            sully = self._analytics.sullygoose_for(login, viewers, platform=platform) or {}
         if sully:
             growth = sully.get("viewer_growth", 0)
             if growth is not None:

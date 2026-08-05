@@ -119,6 +119,25 @@ class CurrentWatchingUIBuilder:
         )
         info_layout.addWidget(self.panel.title_label)
 
+        # Uptime and time labels
+        self.panel.uptime_label = QLabel("⏱ —")
+        self.panel.uptime_label.setStyleSheet(
+            f"color: {Theme.MUTED}; font-size: 9px;"
+        )
+        info_layout.addWidget(self.panel.uptime_label)
+
+        self.panel.streamer_time_label = QLabel("⏰ Streamer: —")
+        self.panel.streamer_time_label.setStyleSheet(
+            f"color: {Theme.MUTED}; font-size: 8px;"
+        )
+        info_layout.addWidget(self.panel.streamer_time_label)
+
+        self.panel.my_time_label = QLabel("⏰ Me: —")
+        self.panel.my_time_label.setStyleSheet(
+            f"color: {Theme.MUTED}; font-size: 8px;"
+        )
+        info_layout.addWidget(self.panel.my_time_label)
+
         header.addLayout(info_layout, 1)
         layout.addLayout(header)
 

@@ -1,11 +1,11 @@
 import os
 
-from PySide6.QtCore import QSettings, Signal, QObject, Qt
+from PySide6.QtCore import QSettings, Signal, QObject, Qt, QTimer
 from PySide6.QtWidgets import QMainWindow
 
 from logger import debug
 from video import VideoWindow
-from core import StreamDispatcher, RaidMonitor, ViewerTracker, ViewerMonitor, wait_for_pending, TimeBoss
+from core import StreamDispatcher, RaidMonitor, ViewerTracker, ViewerMonitor, wait_for_pending
 from .app_runtime import MainMenuRuntime
 from .channel_state import MainMenuStreamState
 from .currwatching import CurrentWatchingPanel
@@ -43,8 +43,8 @@ class MainMenu(
         self._injected_video_window = video_window
 
         self.settings = QSettings(
-            "Twitcher",
-            "TwitcherControlCenter"
+            "Watcher",
+            "WatcherControlCenter"
         )
 
         self.user = None
@@ -76,15 +76,26 @@ class MainMenu(
         )
 
 
-        self.time_boss = TimeBoss(self)
-
+        #
+        # Viewer Monitor (owns its own QTimer)
+        #
         self.viewer_monitor = ViewerMonitor(
             api=self.api,
             tracker=self.viewer_tracker,
             get_live_channels=self._fetch_live_channels,
             update_callback=self.update_current_stream_view,
             analytics_engine=self.analytics_engine,
+            interval_ms=4000,
         )
+
+        # Initialize platform manager for multi-platform support
+        self.platform_manager = None
+        try:
+            from platforms import get_platform_manager
+            self.platform_manager = get_platform_manager()
+            debug("[WATCHER] Platform manager initialized (Twitch, Kick, YouTube)")
+        except Exception as e:
+            debug(f"[WATCHER] Platform manager init failed: {e}")
 
 
         self.avatar_cache = {}
@@ -116,10 +127,6 @@ class MainMenu(
         )
 
 
-        # Register raid monitor with TimeBoss (no separate thread timer).
-        self.raid_monitor.start(self.time_boss)
-
-
         self.dispatcher = StreamDispatcher(
             api=self.api,
             video_window=self.video_window,
@@ -131,7 +138,7 @@ class MainMenu(
 
 
         self.setWindowTitle(
-            "Twitcher Control Center"
+            "Watcher Control Center"
         )
 
         self.setMinimumSize(
@@ -145,47 +152,39 @@ class MainMenu(
         self.restore_window_geometry()
 
 
-        # Give TimeBoss direct control of the video window (highest priority).
-        self.time_boss.set_video_window(self.video_window)
+        #
+        # Periodic timers
+        #
 
-        # Register video auto-play as the highest-priority slot.
-        # This makes the video window completely independent of Twitch auth:
-        # it only uses local channel history + the auth-free stream resolver.
-        self.time_boss.register(
-            "video_player",
-            lambda: self.time_boss.ensure_video_playing(self._get_recent_channels_for_video),
-            priority=TimeBoss.PRIORITY_VIDEO,
-        )
+        # Video auto-play timer (highest priority)
+        self._video_timer = QTimer(self)
+        self._video_timer.setInterval(4000)
+        self._video_timer.timeout.connect(self._auto_play_video)
+        self._video_timer.start()
 
-        # Register a TimeBoss task to periodically fetch SG data for live channels.
-        self.time_boss.register(
-            "sg_fetch",
-            lambda: self.analytics_engine.fetch_all_live_channels(
-                self._fetch_live_channels()
-            ),
-            priority=TimeBoss.PRIORITY_ANALYTICS,
-        )
+        # SG fetch timer
+        self._sg_timer = QTimer(self)
+        self._sg_timer.setInterval(30000)
+        self._sg_timer.timeout.connect(self._fetch_sg_data)
+        self._sg_timer.start()
 
-        # Register MOM+SG refresh (every 4 seconds via TimeBoss tick)
-        self.time_boss.register(
-            "momsg_refresh",
-            lambda: self._refresh_momsg(),
-            priority=TimeBoss.PRIORITY_UI,
-        )
+        # MOM+SG refresh timer
+        self._momsg_timer = QTimer(self)
+        self._momsg_timer.setInterval(4000)
+        self._momsg_timer.timeout.connect(self._refresh_momsg)
+        self._momsg_timer.start()
 
-        # Register periodic live channels refresh (every 4 seconds)
-        self.time_boss.register(
-            "live_channels_refresh",
-            lambda: self._refresh_live_channels(),
-            priority=TimeBoss.PRIORITY_UI,
-        )
+        # Live channels refresh timer
+        self._live_timer = QTimer(self)
+        self._live_timer.setInterval(4000)
+        self._live_timer.timeout.connect(self._refresh_live_channels)
+        self._live_timer.start()
 
-        self.viewer_monitor.start(self.time_boss)
 
-        self.time_boss.start()
+        self.viewer_monitor.start()
 
         self.log(
-            "Viewer monitor started (TimeBoss-driven)."
+            "Viewer monitor started."
         )
 
         # Restore cached streamer data into UI panels so they render
@@ -199,38 +198,50 @@ class MainMenu(
 
     def _on_analytics_signal(self, stream, analysis):
         """Handle analytics update from background thread via signal."""
-        print(f"[MAIN MENU] _on_analytics_signal called: stream={stream.get('user_login') if stream else None}, has_sullygoose={'sullygoose' in (analysis or {})}")
+        debug(f"[MAIN MENU] _on_analytics_signal: stream={stream.get('user_login') if stream else None}, has_sullygoose={'sullygoose' in (analysis or {})}")
         if stream and analysis:
-            # Force update even if viewer_monitor also updates - this has the fresh data
             self.current_stream = stream
             self.update_current_stream_view(stream, analysis)
 
+    def _auto_play_video(self):
+        """Auto-play video if nothing is playing."""
+        try:
+            channels = self._get_recent_channels_for_video()
+            if not channels:
+                return
+            state = self.video_window.get_player_state()
+            if state and state.get("playing"):
+                return
+            for channel in channels:
+                try:
+                    self.video_window.start_channel(channel)
+                    return
+                except Exception:
+                    continue
+        except Exception as e:
+            debug(f"[VIDEO] Auto-play error: {e}")
+
+    def _fetch_sg_data(self):
+        """Fetch SullyGoose data for all live channels."""
+        try:
+            self.analytics_engine.fetch_all_live_channels(self._fetch_live_channels())
+        except Exception as e:
+            debug(f"[SG] Fetch error: {e}")
+
     def _refresh_momsg(self):
-        """Refresh MOM and SG widgets every 4 seconds via TimeBoss.
-        
-        Calls panel.refresh_momsg() which updates:
-        - MOM gauge (momentum), LCD (viewer count), graph (history)
-        - SG metrics that change frequently
-        - Persists viewer history to DB
-        """
+        """Refresh MOM and SG widgets every 4 seconds."""
         if hasattr(self, 'current_panel') and self.current_panel:
             self.current_panel.refresh_momsg(self.current_stream, self.current_panel.viewer_analysis)
 
     def _refresh_live_channels(self):
-        """Periodically refresh the live channels list from Twitch API.
-        
-        This ensures the viewer_monitor always has fresh channel data
-        to work with on each tick.
-        """
+        """Periodically refresh the live channels list from Twitch API."""
         if self.is_closing or not self.user:
             return
         
-        # Only refresh if we don't have live channels or it's been a while
         if not self.live_channels:
-            print("[LIVE CHANNELS] Refreshing (empty list)")
+            debug("[LIVE CHANNELS] Refreshing (empty list)")
             self.load_live_channels()
         else:
-            # Check if current_stream is in live_channels
             if self.current_stream:
                 current_login = self.current_stream.get('user_login')
                 in_list = any(
@@ -238,11 +249,11 @@ class MainMenu(
                     for s in self.live_channels
                 )
                 if not in_list:
-                    print(f"[LIVE CHANNELS] Adding current_stream {current_login} to list")
+                    debug(f"[LIVE CHANNELS] Adding current_stream {current_login} to list")
                     self.live_channels.append(self.current_stream)
 
     def _get_recent_channels_for_video(self):
-        """Return recent channels for TimeBoss video auto-play from DB."""
+        """Return recent channels for video auto-play from DB."""
         try:
             from core.db import get_recent_channels
             return get_recent_channels(limit=10)
@@ -363,9 +374,6 @@ class MainMenu(
         )
 
 
-        #
-        # Needed by ViewerMonitor
-        #
         self.current_stream = {
             "user_login": self.current_channel,
             "user_name": self.current_channel
@@ -396,7 +404,7 @@ class MainMenu(
         if announcement_type == "raid":
 
             self.log(
-                f"📢 RAID: {data.get('from_streamer','unknown')} → "
+                f"RAID: {data.get('from_streamer','unknown')} -> "
                 f"{data.get('to_streamer','unknown')} "
                 f"({data.get('viewers',0):,} viewers)"
             )
@@ -405,7 +413,7 @@ class MainMenu(
         elif announcement_type == "stream":
 
             self.log(
-                f"📢 STREAM ANNOUNCEMENT: "
+                f"STREAM ANNOUNCEMENT: "
                 f"{data.get('streamer','unknown')}"
             )
 
@@ -431,14 +439,21 @@ class MainMenu(
 
 
         try:
-            self.viewer_monitor.stop(self.time_boss)
+            self.viewer_monitor.stop()
         except Exception:
             pass
 
         try:
-            self.raid_monitor.stop(self.time_boss)
+            self.raid_monitor.stop()
         except Exception:
             pass
+
+        # Stop all timers
+        for timer in [self._video_timer, self._sg_timer, self._momsg_timer, self._live_timer]:
+            try:
+                timer.stop()
+            except Exception:
+                pass
 
 
         try:

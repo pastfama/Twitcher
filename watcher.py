@@ -82,8 +82,8 @@ def show_startup_error(title, error, wait=True):
 
 def create_application():
     app = QApplication(sys.argv)
-    app.setOrganizationName("Twitcher")
-    app.setApplicationName("Twitcher Control Center")
+    app.setOrganizationName("Watcher")
+    app.setApplicationName("Watcher Control Center")
     return app
 
 
@@ -93,35 +93,57 @@ def create_application():
 
 
 def initialize_twitch_authentication():
+    """Initialize authentication for all platforms."""
+    from account_manager import AccountManager
+    am = AccountManager()
+
     print()
-    print("[TWITCH] Validating Twitch authentication...")
+    print("[AUTH] Checking platform authentication...")
+
+    # Check Twitch
+    print("[AUTH] Checking Twitch...")
     access_token = get_valid_token()
-
     if not access_token:
-        print()
-        print("[TWITCH] No valid Twitch token found. Starting authorization flow...")
-        authenticate()
-        access_token = get_valid_token()
+        print("[AUTH] No valid Twitch token found.")
+        print("[AUTH] Starting Twitch authorization flow...")
+        if am.login_twitch():
+            access_token = get_valid_token()
+        else:
+            print("[AUTH] Twitch login failed or was cancelled.")
 
-    if not access_token:
-        raise RuntimeError(
-            "Twitch authentication is unavailable.\n\n"
-            "The access token is invalid and could not be refreshed.\n\n"
-            "Run twitch_auth.py to authenticate again."
-        )
+    if access_token:
+        print("[AUTH] Twitch authentication is ready.")
+    else:
+        print("[AUTH] Twitch authentication unavailable.")
 
-    print()
-    print("[TWITCH] Twitch authentication is ready.")
+    # Check Kick
+    print("[AUTH] Checking Kick...")
+    if am.is_kick_configured():
+        print("[AUTH] Kick configured (public API).")
+    else:
+        print("[AUTH] Kick not configured.")
+        print("[AUTH] To enable Kick, set KICK_CLIENT_ID and KICK_CLIENT_SECRET in .env")
+        print("[AUTH] Or run: python -c \"from account_manager import AccountManager; AccountManager().login_kick()\"")
+
+    # Check YouTube
+    print("[AUTH] Checking YouTube...")
+    if am.is_youtube_configured():
+        print("[AUTH] YouTube configured.")
+    else:
+        print("[AUTH] YouTube not configured.")
+        print("[AUTH] To enable YouTube, set YOUTUBE_API_KEY or YOUTUBE_CLIENT_ID in .env")
+        print("[AUTH] Or run: python -c \"from account_manager import AccountManager; AccountManager().login_youtube()\"")
+
     print()
     return access_token
 
 
 # ============================================================
-#                    START TWITCHER
+#                    START WATCHER
 # ============================================================
 
 
-def start_twitcher(app):
+def start_watcher(app):
     # --------------------------------------------------------
     # AUTH-INDEPENDENT VIDEO WINDOW
     # --------------------------------------------------------
@@ -203,7 +225,7 @@ def start_twitcher(app):
     # --------------------------------------------------------
 
     print()
-    print("[WINDOW] Twitcher initialized.")
+    print("[WINDOW] Watcher initialized.")
     print()
     print("[WINDOW] Control Center: RESTORED POSITION")
     print("[WINDOW] Video Player: RESTORED POSITION")
@@ -218,19 +240,19 @@ def start_twitcher(app):
 
 
 def enable_verbose_logging():
-    """Enable DEBUG-level logging when TWITCHER_DEBUG=1 is set."""
-    if os.environ.get("TWITCHER_DEBUG") == "1":
+    """Enable DEBUG-level logging when WATCHER_DEBUG=1 is set."""
+    if os.environ.get("WATCHER_DEBUG") == "1":
         import logging
         logging.basicConfig(
             level=logging.DEBUG,
             format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         )
-        print("[DEBUG] Verbose logging enabled (TWITCHER_DEBUG=1)")
+        print("[DEBUG] Verbose logging enabled (WATCHER_DEBUG=1)")
 
 
 def main():
     # --------------------------------------------------------
-    # VERBOSE DEBUGGING (from start_twitcher_watch.bat)
+    # VERBOSE DEBUGGING (from start_watcher_watch.bat)
     # --------------------------------------------------------
     enable_verbose_logging()
 
@@ -238,26 +260,26 @@ def main():
     # SINGLE INSTANCE GUARD
     # --------------------------------------------------------
     #
-    # Prevent two Twitcher processes from running at the same
+    # Prevent two Watcher processes from running at the same
     # time. Two instances would each create an EventSub
     # subscription for the same channel, and Twitch rejects the
     # second one with HTTP 429 ("maximum subscriptions with type
     # and condition exceeded"), which also floods the logs.
 
     lock_file = QLockFile(
-        os.path.join(QDir.tempPath(), "twitcher-control-center.lock")
+        os.path.join(QDir.tempPath(), "watcher-control-center.lock")
     )
 
     if not lock_file.tryLock(100):
         print()
-        print("[LOCK] Another Twitcher instance is already running. "
+        print("[LOCK] Another Watcher instance is already running. "
               "This instance will exit.")
         print()
         return
 
     print()
     print("=" * 60)
-    print("                 TWITCHER CONTROL CENTER")
+    print("                 WATCHER CONTROL CENTER")
     print("=" * 60)
     print()
 
@@ -278,10 +300,10 @@ def main():
     # --------------------------------------------------------
 
     try:
-        window = start_twitcher(app)
+        window = start_watcher(app)
 
     except Exception as error:
-        show_startup_error("[STARTUP ERROR] Twitcher failed to start.", error)
+        show_startup_error("[STARTUP ERROR] Watcher failed to start.", error)
         return
 
     # --------------------------------------------------------
@@ -289,7 +311,7 @@ def main():
     # --------------------------------------------------------
 
     try:
-        if os.environ.get("TWITCHER_WATCH") == "1":
+        if os.environ.get("WATCHER_WATCH") == "1":
             debug("Watch mode enabled; starting source watcher")
             root = Path(__file__).parent
             skip = {".venv", "venv", "__pycache__", ".git", "build", "dist"}
@@ -309,13 +331,13 @@ def main():
         sys.exit(exit_code)
 
     except Exception as error:
-        show_startup_error("[RUNTIME ERROR] Twitcher crashed.", error)
+        show_startup_error("[RUNTIME ERROR] Watcher crashed.", error)
 
 
 def watch_files_and_exit_on_change(paths, interval=1.0):
     """Exit when a watched Python source file changes.
 
-    This is a simple developer helper. Run with TWITCHER_WATCH=1 and
+    This is a simple developer helper. Run with WATCHER_WATCH=1 and
     restart your app from the shell when the process exits.
     """
     mtimes = {}

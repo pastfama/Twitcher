@@ -41,7 +41,7 @@ class NextStreamPanel(ctk.CTkFrame):
                      text_color=Theme.TEXT_SECONDARY).pack(anchor="w", padx=12)
 
         self.reason_var = tk.StringVar(
-            value="If the current stream ends without a raid, Twitcher will switch here.")
+            value="If the current stream ends without a raid, Watcher will switch here.")
         ctk.CTkLabel(self, textvariable=self.reason_var,
                      text_color=Theme.MUTED, wraplength=240,
                      font=font(9)).pack(anchor="w", padx=12, pady=(6, 8))

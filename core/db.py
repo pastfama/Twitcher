@@ -1,4 +1,4 @@
-"""SQLite database layer for Twitcher.
+"""SQLite database layer for Watcher.
 
 Single source of truth for all persistent data: streamer metadata,
 SullyGoose analytics, viewer history, channel history, and app settings.
@@ -6,7 +6,7 @@ SullyGoose analytics, viewer history, channel history, and app settings.
 Replaces: streamer_history.py, channel_history.py, sg_cache.py,
 and QSettings for non-window-geometry data.
 
-The database file lives at: C:\\Tools\\Twitcher\\twitcher.db
+The database file lives at: C:\\Tools\\Twitcher\\watcher.db
 """
 
 import json
@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE_DIR, "twitcher.db")
+DB_PATH = os.path.join(BASE_DIR, "watcher.db")
 
 _lock = threading.RLock()
 

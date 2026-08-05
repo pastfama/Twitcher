@@ -1,7 +1,7 @@
 from PIL import Image
 
-input_file = "twitcher_icon.png"
-output_file = "twitcher.ico"
+input_file = "watcher_icon.png"
+output_file = "watcher.ico"
 
 image = Image.open(input_file)
 

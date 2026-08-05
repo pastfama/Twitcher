@@ -1,29 +1,13 @@
-from PySide6.QtWidgets import QMessageBox
-
 from core import run_in_background
-from .theme import Theme
 
 
 class MainMenuRuntime:
-    def load_twitch(self):
-        self.dispatcher_panel.set_status("Connecting to Twitch...")
-        self._run_background(self.api.get_current_user, self.handle_user_loaded, self.handle_user_failed)
+    """Mixin providing background task execution.
 
-    def handle_user_loaded(self, user):
-        if self.is_closing:
-            return
-        self.user = user or {}
-        self.log(f"Logged in as {self.user.get('display_name', 'unknown')}")
-        self.chat_panel.set_username(self.user.get("login", ""))
-        self.dispatcher_panel.set_status("Connected to Twitch")
-        self.load_live_channels()
-
-    def handle_user_failed(self, message):
-        if self.is_closing:
-            return
-        self.dispatcher_panel.set_status("Twitch connection error")
-        self.log(f"ERROR: {message}")
-        QMessageBox.critical(self, "Twitch Error", message)
+    Note: load_twitch(), handle_user_loaded(), and handle_user_failed()
+    are defined in channel_state.py which adds UI state updates (connection
+    label styling). This class only provides the _run_background helper.
+    """
 
     def _run_background(self, func, on_success, on_error):
         run_in_background(func, on_success, on_error)

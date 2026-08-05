@@ -310,21 +310,6 @@ def get_token_identity(
 
 ):
 
-        debug(
-
-            error
-
-        )
-
-        return ""
-
-
-def get_token_identity(
-
-    access_token
-
-):
-
     access_token = normalize_token(
 
         access_token
@@ -1362,9 +1347,7 @@ class TwitchChatClient(
 
             debug(
 
-                "[CHAT PARSE ERROR]",
-
-                error
+                f"[CHAT PARSE ERROR] {error}"
 
             )
 

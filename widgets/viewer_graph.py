@@ -94,8 +94,11 @@ class ViewerHistoryGraph(QWidget):
             path.closeSubpath()
 
             gradient = QLinearGradient(0, pad, 0, pad + gh)
-            gradient.setColorAt(0, QColor(self._FILL_TOP, 50))
-            gradient.setColorAt(1, QColor(self._FILL_TOP, 0))
+            fill_color = QColor(self._FILL_TOP)
+            fill_color.setAlpha(50)
+            gradient.setColorAt(0, fill_color)
+            fill_color.setAlpha(0)
+            gradient.setColorAt(1, fill_color)
             painter.fillPath(path, gradient)
 
             # --- line ---

@@ -284,11 +284,14 @@ class TwitchTokenManager:
                 # never_request list in config.yaml
                 # ------------------------------------------------
 
-                forbidden_scopes = [
-                    scope
-                    for scope in scopes
-                    if scope in get_never_request_scopes()
-                ]
+                try:
+                    forbidden_scopes = [
+                        scope
+                        for scope in scopes
+                        if scope in get_never_request_scopes()
+                    ]
+                except Exception:
+                    forbidden_scopes = []
 
                 if forbidden_scopes:
 

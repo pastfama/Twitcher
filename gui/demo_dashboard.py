@@ -1,6 +1,6 @@
 """Runnable full-dashboard demo with a mock provider.
 
-Simulates all Twitcher metrics live: viewer count sentiment, next stream,
+Simulates all Watcher metrics live: viewer count sentiment, next stream,
 live-followed list, dispatcher log lines, chat messages, SullyGoose
 analytics, raid events — every second. No PySide6, no network.
 

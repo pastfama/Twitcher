@@ -1,4 +1,4 @@
-"""Reusable UI widgets for the Twitcher application.
+"""Reusable UI widgets for the Watcher application.
 
 Provides standalone components that can be used across multiple panels:
 - mom: Momentum gauge widget

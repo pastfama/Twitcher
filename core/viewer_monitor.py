@@ -2,18 +2,17 @@
 QThreadPool so the GUI thread never blocks.
 """
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QTimer
 
 from core.workers import run_in_background
 from logger import debug
 
 
 class ViewerMonitor(QObject):
-    """Live-channel monitor driven by the central TimeBoss.
+    """Live-channel monitor with its own QTimer.
 
-    IMPORTANT: This no longer owns its own QTimer.  The app's TimeBoss
-    calls :meth:`tick` every refresh cycle.  That method only *dispatches*
-    work to the thread pool — no network I/O, no tracker/UI updates here.
+    Periodically checks live channels and dispatches per-channel checks
+    to the thread pool. No network I/O happens on the GUI thread.
     """
 
     def __init__(
@@ -23,6 +22,7 @@ class ViewerMonitor(QObject):
         get_live_channels,
         update_callback,
         analytics_engine=None,
+        interval_ms=4000,
     ):
 
         super().__init__()
@@ -33,44 +33,34 @@ class ViewerMonitor(QObject):
         self.update_callback = update_callback
         self.analytics_engine = analytics_engine
 
-    # ================================================================
-    # TIME-BOSS INTERFACE
-    # ================================================================
+        self._timer = QTimer(self)
+        self._timer.setInterval(interval_ms)
+        self._timer.timeout.connect(self.tick)
 
-    # ================================================================
-    # LIFECYCLE (called by TimeBoss owner, typically MainMenu)
-    # ================================================================
+    def start(self):
+        """Start the periodic monitoring."""
+        self._timer.start()
+        debug("[VIEWER MONITOR] Started")
 
-    def start(self, time_boss):
-        """Register this monitor with the central TimeBoss."""
-        time_boss.register("viewer_monitor", self.tick)
-
-    def stop(self, time_boss):
-        """Unregister from the TimeBoss."""
-        time_boss.unregister("viewer_monitor", self.tick)
+    def stop(self):
+        """Stop the periodic monitoring."""
+        self._timer.stop()
+        debug("[VIEWER MONITOR] Stopped")
 
     def tick(self):
-        """Called by TimeBoss on every refresh cycle.
+        """Called on every timer tick.
 
         Dispatches per-channel checks to the thread pool and returns
         immediately.
         """
 
-        import sys
-        print(
-            "[VIEWER MONITOR] Tick (dispatching)",
-            file=sys.stderr
-        )
-
         try:
 
             channels = self.get_live_channels()
-            print(f"[VIEWER MONITOR] Got {len(channels)} channels from get_live_channels()")
+            debug(f"[VIEWER MONITOR] Got {len(channels)} channels from get_live_channels()")
 
             if not channels:
-                print(
-                    "[VIEWER MONITOR] No live channels"
-                )
+                debug("[VIEWER MONITOR] No live channels")
                 return
 
             for channel in channels:
@@ -86,17 +76,12 @@ class ViewerMonitor(QObject):
                         login = (
                             channel.get("user_login")
                             or channel.get("user_name")
+                            or channel.get("channel")
                             or channel.get("broadcaster_login")
                         )
 
                     if not login:
                         continue
-
-                    # --------------------------------------------------
-                    # All blocking Twitch API + tracker work happens on
-                    # the thread pool; the callback is delivered back on
-                    # the GUI thread via the queued signal in workers.py
-                    # --------------------------------------------------
 
                     run_in_background(
                         lambda login=login: self._check_channel(login),
@@ -106,61 +91,28 @@ class ViewerMonitor(QObject):
 
                 except Exception as exc:
 
-                    print(
-                        f"[VIEWER MONITOR] {login} dispatch error: {exc}"
-                    )
+                    debug(f"[VIEWER MONITOR] {login} dispatch error: {exc}")
 
         except Exception as exc:
 
-            print(
-                f"[VIEWER MONITOR ERROR] {exc}"
-            )
-
-    # ================================================================
-    # WORKER THREAD WORK
-    # ================================================================
+            debug(f"[VIEWER MONITOR ERROR] {exc}")
 
     def _check_channel(self, login):
         """Runs on a thread-pool thread.  Returns (stream, analytics)."""
 
-        stream = self.api.get_stream_info(
-            login
-        )
+        stream = self.api.get_stream_info(login)
 
         if not stream:
             return None
 
         analytics = None
 
-        # Use the shared AnalyticsEngine if provided; otherwise fall back
-        # to the legacy tracker.  Creating a new engine per-channel per-tick
-        # exhausts the thread pool and hangs the GUI.
         if self.analytics_engine:
-
-            analytics = self.analytics_engine.update_stream(
-                stream
-            )
-
+            analytics = self.analytics_engine.update_stream(stream)
         elif self.tracker:
-
-            analytics = self.tracker.update_stream(
-                stream
-            )
+            analytics = self.tracker.update_stream(stream)
 
         return stream, analytics
-
-    # ================================================================
-    # GUI-THREAD CALLBACKS (queued by run_in_background)
-    # ================================================================
-
-    @staticmethod
-    def _safe_print(text):
-        """Print to console, replacing non-ASCII chars safely."""
-        try:
-            print(text)
-        except UnicodeEncodeError:
-            safe = text.encode("ascii", errors="replace").decode("ascii")
-            print(safe)
 
     def _on_channel_checked(self, login, result):
         """Delivered on the GUI thread with the worker's result."""
@@ -172,39 +124,15 @@ class ViewerMonitor(QObject):
                 return
 
             stream, analytics = result
-            debug(f"[VIEWER MONITOR] Result for {login}: viewers={stream.get('viewer_count', 0)}, has_analytics={analytics is not None}, sully={analytics.get('sullygoose', {}) if analytics else {}}")
-
-            # The analytics dict contains emoji status labels (🚀🟢📉🔴🟡),
-            # which are fine for Qt UI but crash Windows console print()
-            # with the charmap codec. Convert to a safe string first.
-            analytics_text = ""
-            if analytics:
-                status = analytics.get("status", "")
-                safe_status = status.encode("ascii", errors="replace").decode("ascii") if isinstance(status, str) else str(status)
-                analytics_text = f" ({safe_status})"
+            debug(f"[VIEWER MONITOR] Result for {login}: viewers={stream.get('viewer_count', 0)}")
 
             if self.update_callback:
-                debug(f"[VIEWER MONITOR] Calling update_callback for {login}")
-                self.update_callback(
-                    stream,
-                    analytics
-                )
-
-            self._safe_print(
-                f"[VIEWER MONITOR] "
-                f"{login}: "
-                f"{stream.get('viewer_count', 0)} viewers"
-                f"{analytics_text}"
-            )
+                self.update_callback(stream, analytics)
 
         except Exception as exc:
 
-            self._safe_print(
-                f"[VIEWER MONITOR] {login} callback error: {exc}"
-            )
+            debug(f"[VIEWER MONITOR] {login} callback error: {exc}")
 
     def _on_channel_error(self, login, message):
 
-        print(
-            f"[VIEWER MONITOR] {login} error: {message}"
-        )
+        debug(f"[VIEWER MONITOR] {login} error: {message}")

@@ -21,7 +21,6 @@ from .stream_resolver import (
     try_resolve as try_resolve_streams,
 )
 from .analytics_engine import AnalyticsEngine
-from .time_boss import TimeBoss
 from .viewer_monitor import ViewerMonitor
 from .viewer_tracker import ViewerTracker
 from .workers import BackgroundTask, TaskSignals, run_in_background, wait_for_pending
@@ -44,7 +43,6 @@ __all__ = [
     "normalize_stream_channel",
     "resolve_stream_url",
     "try_resolve_streams",
-    "TimeBoss",
     "AnalyticsEngine",
     "update_streamer",
     "get_streamer",
