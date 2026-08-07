@@ -1,0 +1,285 @@
+# ============================================================
+#                    TWITCHER API CONFIGURATION
+# ============================================================
+#
+# This file is the single source of truth for Twitch API settings.
+# All timing, credentials, endpoints, and OAuth scopes are defined here.
+#
+# ============================================================
+#                    TIMING
+# ============================================================
+
+timing:
+  refresh_interval: 7000  # milliseconds (7 seconds)
+  retry_attempts: 3
+  retry_delay: 2000
+
+# ============================================================
+#                    CREDENTIALS
+# ============================================================
+
+credentials:
+  username: "your_username"
+  token: "your_oauth_token"
+
+# ============================================================
+#                    ENDPOINTS
+# ============================================================
+
+endpoints:
+  stream_info: "https://api.twitch.tv/helix/streams"
+  user_info: "https://api.twitch.tv/helix/users"
+
+# ============================================================
+#                    TWITCH API SCOPES
+# ============================================================
+#
+# Twitcher is a viewer application for logged-in followers and
+# subscribers. The user is NOT a moderator of any watched channel.
+#
+# Scopes are organized into three categories:
+#   1. request:    Scopes Twitcher needs to function
+#   2. available:  All scopes safe for a non-moderator viewer
+#   3. forbidden:  Scopes that require moderator/broadcaster role
+#
+# ============================================================
+#  SCOPES FOR A NON-MODERATOR LOGGED-IN VIEWER
+# ============================================================
+#
+#  USER SCOPES (own account):
+#    user:read:email           - Read own email address
+#    user:read:follows         - Read own followed channels
+#    user:read:subscriptions   - Read own channel subscriptions
+#    user:read:blocked_users   - Read own blocked users list
+#    user:manage:blocked_users - Manage own blocked users list
+#    user:read:chat           - Read chat as the user
+#    user:write:chat          - Send chat as the user
+#    user:read:chat_color     - Read own chat color
+#    user:manage:chat_color   - Manage own chat color
+#    user:read:chat_settings  - Read own chat settings
+#    user:manage:chat_settings - Manage own chat settings
+#    user:read:emotes         - Read own emotes
+#    user:read:entitlements   - Read own entitlements (drops)
+#    user:read:follower       - Read if user follows a channel
+#    user:read:whispers       - Read own whispers
+#    user:manage:whispers     - Send whispers
+#    user:read:announcements  - Read channel announcements
+#    user:read:moderated_channels - Read channels user moderates
+#    user:read:broadcast      - Read own broadcast settings
+#
+#  CHAT SCOPES:
+#    chat:read                - Read chat messages
+#    chat:edit                - Send chat messages
+#
+#  BITS SCOPES:
+#    bits:read                - Read bits data on a channel
+#
+#  CLIPS SCOPES:
+#    clips:edit               - Create clips
+#
+#  WHISPERS SCOPES:
+#    whispers:read            - Read whispers
+#    whispers:edit            - Send whispers
+#
+#  CHANNEL READ-ONLY SCOPES (safe for viewer):
+#    channel:read:subscriptions - Read channel subscriptions
+#    channel:read:redemptions   - Read channel point redemptions
+#    channel:read:goals         - Read creator goals
+#    channel:read:hype_train    - Read hype train events
+#    channel:read:polls         - Read channel polls
+#    channel:read:predictions   - Read channel predictions
+#    channel:read:charity       - Read charity campaign
+#    channel:read:raids         - Read incoming raids
+#    channel:read:ads           - Read channel ad schedule
+#    channel:read:clips         - Read channel clips
+#
+#  MODERATION READ-ONLY (safe for viewer):
+#    moderation:read           - Read moderation data (read-only)
+#
+# ============================================================
+#  FORBIDDEN SCOPES (require moderator or broadcaster role)
+# ============================================================
+#
+#  MODERATION MANAGEMENT (requires moderator role):
+#    moderation:manage              - Manage bans, timeouts
+#    moderator:manage:announcements  - Send channel announcements
+#    moderator:manage:automod        - Manage AutoMod actions
+#    moderator:manage:automod_settings - Manage AutoMod settings
+#    moderator:manage:bans           - Manage bans
+#    moderator:manage:blocked_terms - Manage blocked terms
+#    moderator:manage:chat_messages  - Delete chat messages
+#    moderator:manage:chat_settings  - Manage chat settings
+#    moderator:manage:clips          - Manage clips (moderator)
+#    moderator:manage:followers      - Manage followers (approve/reject)
+#    moderator:manage:guest_star    - Manage Guest Star (moderator)
+#    moderator:manage:shield_mode    - Manage shield mode (moderator)
+#    moderator:manage:shoutouts      - Manage shoutouts
+#    moderator:manage:unban_requests - Manage unban requests
+#    moderator:manage:warnings       - Manage warnings
+#    moderator:read:announcements    - Read announcements (moderator)
+#    moderator:read:automod          - Read AutoMod actions
+#    moderator:read:automod_settings  - Read AutoMod settings
+#    moderator:read:blocked_terms    - Read blocked terms
+#    moderator:read:chat_messages    - Read chat messages (moderator)
+#    moderator:read:chat_settings    - Read chat settings (moderator)
+#    moderator:read:chatters         - Read chatters list
+#    moderator:read:followers        - Read followers (moderator)
+#    moderator:read:guest_star       - Read Guest Star (moderator)
+#    moderator:read:moderators       - Read moderators list
+#    moderator:read:shield_mode       - Read shield mode (moderator)
+#    moderator:read:shoutouts        - Read shoutouts
+#    moderator:read:suspensions      - Read suspensions
+#    moderator:read:unban_requests  - Read unban requests
+#    moderator:read:vips             - Read VIPs list
+#    moderator:read:warnings         - Read warnings
+#
+#  CHANNEL MANAGEMENT (requires broadcaster role):
+#    channel:manage:ads              - Manage channel ads
+#    channel:manage:broadcast         - Manage broadcast (stream key, markers)
+#    channel:manage:clips            - Manage clips
+#    channel:manage:guest_star       - Manage Guest Star
+#    channel:manage:moderators       - Manage moderators
+#    channel:manage:polls            - Manage polls
+#    channel:manage:predictions      - Manage predictions
+#    channel:manage:raids            - Manage raids
+#    channel:manage:redemptions     - Manage channel point redemptions
+#    channel:manage:shield_mode      - Manage shield mode
+#    channel:manage:stream_key      - Manage stream key
+#    channel:manage:vips             - Manage VIPs
+#    channel:bot:chat                - Send chat as channel bot
+#    channel:read:editors            - Read channel editors
+#    channel:read:guest_star         - Read Guest Star (broadcaster)
+#    channel:read:moderators         - Read moderators (broadcaster)
+#    channel:read:shield_mode        - Read shield mode (broadcaster)
+#    channel:read:stream_key         - Read stream key
+#    channel:read:suspensions        - Read suspensions
+#    channel:read:vips               - Read VIPs (broadcaster)
+#
+#  USER MANAGEMENT (dangerous, never request):
+#    user:edit                       - Edit user account
+#    user:edit:follows               - Edit user follows
+#    user:edit:broadcast             - Edit user broadcast
+#    user:manage:whispers           - Send whispers (use whispers:edit instead)
+#
+# ============================================================
+
+scopes:
+  # Scopes Twitcher currently requests during OAuth
+  request:
+    - "user:read:follows"
+    - "user:read:email"
+    - "chat:read"
+    - "chat:edit"
+    - "channel:read:subscriptions"
+    - "channel:read:redemptions"
+    - "channel:manage:redemptions"
+    - "moderation:read"
+    - "bits:read"
+
+  # All scopes safe for a non-moderator logged-in viewer
+  # (for reference — Twitcher only requests what it needs above)
+  available:
+    # User scopes (own account)
+    - "user:read:email"
+    - "user:read:follows"
+    - "user:read:subscriptions"
+    - "user:read:blocked_users"
+    - "user:manage:blocked_users"
+    - "user:read:chat"
+    - "user:write:chat"
+    - "user:read:chat_color"
+    - "user:manage:chat_color"
+    - "user:read:chat_settings"
+    - "user:manage:chat_settings"
+    - "user:read:emotes"
+    - "user:read:entitlements"
+    - "user:read:follower"
+    - "user:read:whispers"
+    - "user:manage:whispers"
+    - "user:read:announcements"
+    - "user:read:moderated_channels"
+    - "user:read:broadcast"
+    # Chat scopes
+    - "chat:read"
+    - "chat:edit"
+    # Bits scopes
+    - "bits:read"
+    # Clips scopes
+    - "clips:edit"
+    # Whispers scopes
+    - "whispers:read"
+    - "whispers:edit"
+    # Channel scopes (own channel — safe for viewer)
+    - "channel:read:subscriptions"
+    - "channel:read:redemptions"
+    - "channel:manage:redemptions"
+    - "channel:read:goals"
+    - "channel:read:hype_train"
+    - "channel:read:polls"
+    - "channel:read:predictions"
+    - "channel:read:charity"
+    - "channel:read:raids"
+    - "channel:read:ads"
+    - "channel:read:clips"
+    # Moderation read-only (safe for viewer)
+    - "moderation:read"
+
+  # Scopes that must NEVER be requested
+  # These require moderator or broadcaster role on watched channels
+  forbidden:
+    # Moderation management (requires moderator role)
+    - "moderation:manage"
+    - "moderator:manage:announcements"
+    - "moderator:manage:automod"
+    - "moderator:manage:automod_settings"
+    - "moderator:manage:bans"
+    - "moderator:manage:blocked_terms"
+    - "moderator:manage:chat_messages"
+    - "moderator:manage:chat_settings"
+    - "moderator:manage:clips"
+    - "moderator:manage:followers"
+    - "moderator:manage:guest_star"
+    - "moderator:manage:shield_mode"
+    - "moderator:manage:shoutouts"
+    - "moderator:manage:unban_requests"
+    - "moderator:manage:warnings"
+    - "moderator:read:announcements"
+    - "moderator:read:automod"
+    - "moderator:read:automod_settings"
+    - "moderator:read:blocked_terms"
+    - "moderator:read:chat_messages"
+    - "moderator:read:chat_settings"
+    - "moderator:read:chatters"
+    - "moderator:read:followers"
+    - "moderator:read:guest_star"
+    - "moderator:read:moderators"
+    - "moderator:read:shield_mode"
+    - "moderator:read:shoutouts"
+    - "moderator:read:suspensions"
+    - "moderator:read:unban_requests"
+    - "moderator:read:vips"
+    - "moderator:read:warnings"
+    # Channel management (requires broadcaster role)
+    - "channel:manage:ads"
+    - "channel:manage:broadcast"
+    - "channel:manage:clips"
+    - "channel:manage:guest_star"
+    - "channel:manage:moderators"
+    - "channel:manage:polls"
+    - "channel:manage:predictions"
+    - "channel:manage:raids"
+    - "channel:manage:shield_mode"
+    - "channel:manage:stream_key"
+    - "channel:manage:vips"
+    - "channel:bot:chat"
+    - "channel:read:editors"
+    - "channel:read:guest_star"
+    - "channel:read:moderators"
+    - "channel:read:shield_mode"
+    - "channel:read:stream_key"
+    - "channel:read:suspensions"
+    - "channel:read:vips"
+    # User management (dangerous, never request)
+    - "user:edit"
+    - "user:edit:follows"
+    - "user:edit:broadcast"
