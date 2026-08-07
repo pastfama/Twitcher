@@ -1,0 +1,36 @@
+.env
+twitch_token.json
+twitcher.db
+watcher.db
+twitcher_debug.log
+twitcher_run.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.venv-1/
+.venv-2/
+
+# IDE
+.vscode/
+.idea/
+*.vsix
+
+# Logs
+*.log
+
+# Temp files
+stream.ts
+last_channel.txt
+last_channels.txt
+transcript.txt
+transcript_debug.txt
+transcript_live.jsonl
+models/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+*.spec.bak
