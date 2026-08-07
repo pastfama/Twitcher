@@ -1631,6 +1631,19 @@ class ChatWidget(
         self.current_channel = None
 
 
+        # Third-party emote resolver (injected externally or created on demand).
+        self._emote_resolver = None
+
+        # Per-user avatar cache: username → avatar_url
+        self._avatar_cache = {}
+
+        # Channel badge cache: "type/version" → image_url
+        self._badge_cache = {}
+
+        # Broadcaster ID for the current channel (set on connect).
+        self._broadcaster_id = None
+
+
         self.build_ui()
 
 
@@ -1708,122 +1721,32 @@ class ChatWidget(
 
 
         controls = QHBoxLayout()
-
-
+        controls.setSpacing(4)
         self.message_input = QLineEdit()
-
-
         self.message_input.setPlaceholderText(
-
             "Write a message..."
-
         )
-
-
         self.message_input.returnPressed.connect(
-
             self.send_message
-
         )
-
-
         controls.addWidget(
-
-            self.message_input
-
+            self.message_input, 1
         )
-
-
-        self.send_button = QPushButton(
-
-            "SEND"
-
+        # Emoji picker button
+        self.emoji_button = QPushButton("\U0001f600")
+        self.emoji_button.setToolTip("Insert emoji")
+        self.emoji_button.setFixedSize(32, 32)
+        self.emoji_button.setStyleSheet(
+            "font-size: 18px; padding: 2px; border: 1px solid #2a3a5a;"
+            "border-radius: 4px; background-color: #0a0d18;"
         )
-
-
-        self.send_button.clicked.connect(
-
-            self.send_message
-
-        )
-
-
+        self.emoji_button.clicked.connect(self._toggle_emoji_picker)
         controls.addWidget(
-
-            self.send_button
-
+            self.emoji_button
         )
-
-
-        self.translit_button = QPushButton(
-
-            "TRANSLIT"
-
-        )
-
-
-        self.translit_button.setToolTip(
-
-            "Convert Latin text in the message box to Russian Cyrillic."
-
-        )
-
-
-        self.translit_button.clicked.connect(
-
-            self.apply_translit
-
-        )
-
-
-        controls.addWidget(
-
-            self.translit_button
-
-        )
-
-
-        self.auto_translit_button = QPushButton(
-
-            "AUTO"
-
-        )
-
-
-        self.auto_translit_button.setCheckable(
-
-            True
-
-        )
-
-
-        self.auto_translit_button.setToolTip(
-
-            "Automatically transliterate outgoing messages when sending."
-
-        )
-
-
-        self.auto_translit_button.clicked.connect(
-
-            self.toggle_auto_translit
-
-        )
-
-
-        controls.addWidget(
-
-            self.auto_translit_button
-
-        )
-
-
         layout.addLayout(
-
             controls
-
         )
-
 
         channel_controls = QHBoxLayout()
 
@@ -2031,6 +1954,274 @@ class ChatWidget(
     # ========================================================
 
 
+    # ---- Twitch default color palette (for users without custom colors) ----
+    _TWITCH_DEFAULT_COLORS = [
+        "#FF0000", "#0000FF", "#008000", "#8B008B",
+        "#FF6347", "#1E90FF", "#FF4500", "#9400D3",
+        "#008080", "#DAA520", "#FF69B4", "#7B68EE",
+    ]
+
+    def _resolve_user_color(self, tags, username):
+        """Return a hex colour for *username* from IRC tags or a
+        deterministic fallback."""
+        color = (tags or {}).get("color", "").strip()
+        if color:
+            return color
+        # Deterministic fallback: hash the username to pick a palette colour.
+        h = hash(username) & 0xFFFFFFFF
+        return self._TWITCH_DEFAULT_COLORS[h % len(self._TWITCH_DEFAULT_COLORS)]
+
+    def _replace_twitch_emotes(self, message, tags):
+        """Replace emote placeholders with ``<img>`` tags.
+
+        Twitch encodes emote positions in ``tags["emotes"]`` with the
+        format ``id:start-end/id:start-end``.  We replace from right to
+        left so that earlier character indices stay valid.
+        """
+        raw = (tags or {}).get("emotes", "")
+        if not raw:
+            return html.escape(message)
+
+        # Parse emote positions.
+        replacements = []  # [(start, end, emote_id), ...]
+        for group in raw.split("/"):
+            parts = group.split(":")
+            if len(parts) != 2:
+                continue
+            emote_id = parts[0]
+            for span in parts[1].split(","):
+                pos = span.split("-")
+                if len(pos) != 2:
+                    continue
+                start, end = int(pos[0]), int(pos[1])
+                replacements.append((start, end, emote_id))
+
+        # Sort by start position descending so we replace from right to left.
+        replacements.sort(key=lambda r: r[0], reverse=True)
+
+        result = message
+        for start, end, emote_id in replacements:
+            # The emote CDN URL — use animated variant if available,
+            # otherwise static.  Both work; Twitch serves the right one.
+            img_url = (
+                f"https://static-cdn.jtvnw.net/emoticons/v2"
+                f"/{emote_id}/default/dark/2.0"
+            )
+            alt_text = html.escape(message[start:end + 1])
+            img_tag = (
+                f'<img src="{img_url}" '
+                f'alt="{alt_text}" '
+                f'height="28" '
+                f'style="vertical-align:middle;">'
+            )
+            result = result[:start] + img_tag + result[end + 1:]
+
+        # Escape any remaining plain text (but NOT our <img> tags).
+        # Strategy: split on <img ...>, escape the text parts, rejoin.
+        segments = result.split("<img ")
+        escaped_parts = []
+        for i, seg in enumerate(segments):
+            if i == 0:
+                escaped_parts.append(html.escape(seg))
+            else:
+                # Re-add the "<img " prefix we stripped during split.
+                escaped_parts.append("<img " + seg)
+        return "".join(escaped_parts)
+
+    def _replace_third_party_emotes(self, text_html):
+        """Replace known third-party emote codes with ``<img>`` tags.
+
+        This operates on *already-HTML-escaped* text.  Emote codes are
+        matched as whole words (space / punctuation boundaries) against
+        the ``_emote_resolver`` cache.  Replacements are done from
+        right to left so that earlier character indices stay valid.
+        """
+        if self._emote_resolver is None:
+            return text_html
+
+        # Build a list of (start, end, url) for every match.
+        import re
+        replacements = []
+        for match in re.finditer(r'(\S+)', text_html):
+            code = match.group(1)
+            url = self._emote_resolver.resolve(code)
+            if url:
+                replacements.append((match.start(), match.end(), url))
+
+        if not replacements:
+            return text_html
+
+        # Replace right-to-left.
+        replacements.sort(key=lambda r: r[0], reverse=True)
+        result = text_html
+        for start, end, url in replacements:
+            alt = html.escape(text_html[start:end])
+            img = (
+                f'<img src="{url}" '
+                f'alt="{alt}" '
+                f'height="28" '
+                f'style="vertical-align:middle;">'
+            )
+            result = result[:start] + img + result[end:]
+        return result
+
+    # ---- Avatar helpers -------------------------------------------
+
+    def _get_avatar_html(self, username):
+        """Return an ``<img>`` tag for *username*'s avatar, or ``""``
+        if not yet cached.  Avatars are fetched asynchronously in the
+        background; once fetched the cache is populated and subsequent
+        messages will include the avatar immediately."""
+        url = self._avatar_cache.get(username)
+        if url is None:
+            # Not fetched yet — kick off a background fetch.
+            self._avatar_cache[username] = ""  # sentinel: "fetching"
+            threading.Thread(
+                target=self._fetch_avatar,
+                args=(username,),
+                daemon=True,
+            ).start()
+            return ""
+        if not url:
+            return ""  # fetch in progress or failed
+        return (
+            f'<img src="{url}" '
+            f'height="22" '
+            f'style="vertical-align:middle; border-radius:4px; margin-right:3px;">'
+        )
+
+    def _fetch_avatar(self, username):
+        """Fetch a user's profile image from Twitch (blocking).
+        Runs in a background thread.  Downloads the image to a temp
+        file and caches the local file path so QTextBrowser can render it."""
+        try:
+            client_id = self._get_client_id()
+            app_token = self._get_app_token()
+            if not client_id or not app_token:
+                debug(f"[CHAT] Cannot fetch avatar for {username}: missing credentials")
+                self._avatar_cache[username] = ""
+                return
+            resp = requests.get(
+                f"https://api.twitch.tv/helix/users?login={username}",
+                headers={"Client-Id": client_id,
+                          "Authorization": f"Bearer {app_token}"},
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                if data:
+                    img_url = data[0].get("profile_image_url", "")
+                    if img_url:
+                        img_resp = requests.get(img_url, timeout=5)
+                        if img_resp.status_code == 200:
+                            # Save to a local temp file for QTextBrowser.
+                            import os
+                            import tempfile
+                            avatar_dir = os.path.join(
+                                tempfile.gettempdir(), "twitcher_avatars"
+                            )
+                            os.makedirs(avatar_dir, exist_ok=True)
+                            safe_name = "".join(
+                                c if c.isalnum() else "_" for c in username
+                            )
+                            path = os.path.join(avatar_dir, f"{safe_name}.png")
+                            with open(path, "wb") as f:
+                                f.write(img_resp.content)
+                            # Use file:/// URL for QTextBrowser compatibility.
+                            file_url = "file:///" + path.replace("\\", "/")
+                            self._avatar_cache[username] = file_url
+                            debug(f"[CHAT] Avatar cached for {username} → {file_url}")
+                            return
+            debug(f"[CHAT] Avatar fetch for {username} returned HTTP {resp.status_code}")
+            self._avatar_cache[username] = ""
+        except Exception as exc:
+            debug(f"[CHAT] Avatar fetch error for {username}: {exc}")
+            self._avatar_cache[username] = ""
+
+    def _get_client_id(self):
+        """Return the Twitch Client-ID from the environment (same source as the API layer)."""
+        try:
+            from twitch_api.client import TWITCH_CLIENT_ID
+            return TWITCH_CLIENT_ID
+        except Exception:
+            return ""
+
+    def _get_app_token(self):
+        """Return an App Access Token for Helix API calls.
+        The user's OAuth token doesn't have the right scopes for
+        lookups like /helix/users."""
+        try:
+            from twitch_api.client import TwitchAPIClient
+            # Reuse the API layer's cached app token if available.
+            from twitch_api.client import TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET
+            import time as _time
+            if not hasattr(self, '_app_token') or not self._app_token:
+                resp = requests.post(
+                    "https://id.twitch.tv/oauth2/token",
+                    data={
+                        "client_id": TWITCH_CLIENT_ID,
+                        "client_secret": TWITCH_CLIENT_SECRET,
+                        "grant_type": "client_credentials",
+                    },
+                    timeout=5,
+                )
+                if resp.status_code == 200:
+                    self._app_token = resp.json().get("access_token", "")
+            return getattr(self, '_app_token', '')
+        except Exception:
+            return ""
+
+    # ---- Badge helpers --------------------------------------------
+
+    def _get_badges_html(self, tags):
+        """Return HTML ``<img>`` tags for the user's chat badges."""
+        raw = (tags or {}).get("badges", "")
+        if not raw:
+            return ""
+        parts = []
+        for badge_entry in raw.split(","):
+            badge_type, _, version = badge_entry.partition("/")
+            key = f"{badge_type}/{version}"
+            url = self._badge_cache.get(key)
+            if url:
+                parts.append(
+                    f'<img src="{url}" height="16" '
+                    f'style="vertical-align:middle; margin-right:2px;">'
+                )
+        return "".join(parts)
+
+    def fetch_channel_badges(self, broadcaster_id):
+        """Fetch the channel's badge set from the Helix API (blocking).
+        Call this from a background thread after connecting."""
+        if not broadcaster_id:
+            return
+        try:
+            client_id = self._get_client_id()
+            app_token = self._get_app_token()
+            if not client_id or not app_token:
+                return
+            resp = requests.get(
+                "https://api.twitch.tv/helix/chat/badges",
+                params={"broadcaster_id": broadcaster_id},
+                headers={"Client-Id": client_id,
+                          "Authorization": f"Bearer {app_token}"},
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                for badge in data:
+                    badge_type = badge.get("set_id", "")
+                    for img in badge.get("images", []):
+                        ver = img.get("id", "")
+                        url = img.get("dark_theme_1x", "") or img.get("image_url_1x", "")
+                        if url:
+                            self._badge_cache[f"{badge_type}/{ver}"] = url
+                debug(f"[CHAT] Loaded {len(self._badge_cache)} badge images")
+        except Exception as exc:
+            debug(f"[CHAT] Badge fetch error: {exc}")
+
+    # ---- Display message ------------------------------------------
+
     def display_message(
 
         self,
@@ -2045,6 +2236,8 @@ class ChatWidget(
 
     ):
 
+        from PySide6.QtGui import QTextCursor, QTextCharFormat, QTextImageFormat
+
         safe_username = html.escape(
 
             username
@@ -2052,33 +2245,193 @@ class ChatWidget(
         )
 
 
-        safe_message = html.escape(
-
-            message
-
-        )
-
-
-        reply_target = html.escape(
-
-            username
-
-        )
+        # --- Per-user colour ---
+        user_color = self._resolve_user_color(tags, username)
 
 
         debug(f"Displaying chat message from {username}: {message}")
 
-        self.chat_display.append(
 
-            f"<b>{safe_username}</b>: "
+        # Build the message using QTextCursor for reliable image embedding.
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
 
-            f"{safe_message} "
 
-            f"<a href=\"reply:{reply_target}\" "
+        # --- Avatar (22x22) ---
+        avatar_url = self._avatar_cache.get(username)
+        if avatar_url and avatar_url.startswith("file:///"):
+            local_path = avatar_url.replace("file:///", "").replace("/", "\\")
+            avatar_fmt = QTextImageFormat()
+            avatar_fmt.setWidth(22)
+            avatar_fmt.setHeight(22)
+            avatar_fmt.setName(avatar_url)
+            # Register the image resource so QTextDocument can find it.
+            from PySide6.QtCore import QUrl, QVariant
+            from PySide6.QtGui import QPixmap
+            pixmap = QPixmap(local_path)
+            if not pixmap.isNull():
+                self.chat_display.document().addResource(
+                    1,  # QTextDocument.ImageResource
+                    QUrl(avatar_url),
+                    pixmap,
+                )
+                cursor.insertImage(avatar_fmt)
+                # Add a small space after avatar.
+                char_fmt = QTextCharFormat()
+                char_fmt.setProperty(5, " ")  # Add a space.
+                cursor.insertText(" ", char_fmt)
 
-            f"style=\"color:#66b2ff;text-decoration:none\">[reply]</a>"
 
+        # --- Badges ---
+        raw_badges = (tags or {}).get("badges", "")
+        if raw_badges:
+            for badge_entry in raw_badges.split(","):
+                badge_type, _, version = badge_entry.partition("/")
+                badge_url = self._badge_cache.get(f"{badge_type}/{version}", "")
+                if badge_url:
+                    local_badge = self._ensure_local_image(badge_url)
+                    if local_badge:
+                        badge_fmt = QTextImageFormat()
+                        badge_fmt.setWidth(16)
+                        badge_fmt.setHeight(16)
+                        badge_fmt.setName(local_badge)
+                        cursor.insertImage(badge_fmt)
+
+
+        # --- Username (colored + bold) ---
+        user_fmt = QTextCharFormat()
+        user_fmt.setForeground(
+            self.chat_display.palette().color(
+                self.chat_display.foregroundRole()
+            )
         )
+        from PySide6.QtGui import QColor
+        user_fmt.setForeground(QColor(user_color))
+        font = user_fmt.font()
+        font.setBold(True)
+        user_fmt.setFont(font)
+        cursor.insertText(f"{safe_username}", user_fmt)
+
+
+        # --- ": " separator ---
+        sep_fmt = QTextCharFormat()
+        cursor.insertText(": ", sep_fmt)
+
+
+        # --- Message text (with emote images embedded) ---
+        self._insert_message_with_emotes(cursor, message, tags)
+
+
+        # --- Reply link ---
+        reply_fmt = QTextCharFormat()
+        reply_fmt.setForeground(QColor("#66b2ff"))
+        cursor.insertText(" ", reply_fmt)
+
+
+        # Add a newline to end the message.
+        cursor.insertBlock()
+
+
+        # Auto-scroll to bottom.
+        sb = self.chat_display.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
+    # ---- Shared image cache (avatars, badges, emotes) ----
+
+    def _ensure_local_image(self, url):
+        """Download *url* to a temp file if not already cached.
+        Returns a ``file:///`` URL suitable for QTextImageFormat."""
+        if not url:
+            return ""
+        # Already a local file URL?
+        if url.startswith("file:///"):
+            return url
+        # Check our temp-file cache.
+        cache = getattr(self, "_img_file_cache", None)
+        if cache is None:
+            cache = {}
+            self._img_file_cache = cache
+        local = cache.get(url)
+        if local:
+            return local
+        # Download to temp file.
+        try:
+            import os, tempfile
+            resp = requests.get(url, timeout=5)
+            if resp.status_code != 200:
+                return ""
+            ext = ".png"
+            ct = resp.headers.get("content-type", "")
+            if "gif" in ct:
+                ext = ".gif"
+            elif "jpeg" in ct or "jpg" in ct:
+                ext = ".jpg"
+            d = os.path.join(tempfile.gettempdir(), "twitcher_images")
+            os.makedirs(d, exist_ok=True)
+            # Use a hash of the URL as filename.
+            import hashlib
+            name = hashlib.md5(url.encode()).hexdigest() + ext
+            path = os.path.join(d, name)
+            if not os.path.exists(path):
+                with open(path, "wb") as f:
+                    f.write(resp.content)
+            file_url = "file:///" + path.replace("\\", "/")
+            cache[url] = file_url
+            return file_url
+        except Exception:
+            return ""
+
+    def _insert_message_with_emotes(self, cursor, message, tags):
+        """Insert message text, replacing Twitch emotes with inline images."""
+        from PySide6.QtGui import QTextImageFormat
+
+        raw_emotes = (tags or {}).get("emotes", "")
+
+        if not raw_emotes:
+            cursor.insertText(html.escape(message))
+            return
+
+        # Parse emote positions.
+        replacements = []
+        for group in raw_emotes.split("/"):
+            parts = group.split(":")
+            if len(parts) != 2:
+                continue
+            emote_id = parts[0]
+            for span in parts[1].split(","):
+                pos = span.split("-")
+                if len(pos) != 2:
+                    continue
+                start, end = int(pos[0]), int(pos[1])
+                replacements.append((start, end, emote_id))
+
+        replacements.sort(key=lambda r: r[0])
+
+        last_end = 0
+        for start, end, emote_id in replacements:
+            if start > last_end:
+                cursor.insertText(html.escape(message[last_end:start]))
+
+            # Download emote image to temp file for reliable rendering.
+            cdn_url = (
+                f"https://static-cdn.jtvnw.net/emoticons/v2"
+                f"/{emote_id}/default/dark/2.0"
+            )
+            local_url = self._ensure_local_image(cdn_url)
+            if local_url:
+                emote_fmt = QTextImageFormat()
+                emote_fmt.setWidth(28)
+                emote_fmt.setHeight(28)
+                emote_fmt.setName(local_url)
+                cursor.insertImage(emote_fmt)
+            else:
+                # Fallback: show emote text.
+                cursor.insertText(html.escape(message[start:end + 1]))
+
+            last_end = end + 1
+
+        if last_end < len(message):
+            cursor.insertText(html.escape(message[last_end:]))
 
 
     def show_chat_context_menu(
@@ -2321,19 +2674,8 @@ class ChatWidget(
         )
 
 
-        if self.auto_translit_button.isChecked():
-
-            message = transliterate_to_russian(
-
-                message
-
-            )
-
-            self.message_input.setText(
-
-                message
-
-            )
+        message = transliterate_to_russian(message)
+        self.message_input.setText(message)
 
 
         if not message:
@@ -2399,66 +2741,61 @@ class ChatWidget(
     # ========================================================
 
 
-    def apply_translit(
+    # ========================================================
+    #                    EMOJI PICKER
+    # ========================================================
 
-        self
-
-    ):
-
-        current_text = (
-
-            self.message_input
-
-            .text()
-
-            .strip()
-
-        )
-
-
-        if not current_text:
-
+    def _toggle_emoji_picker(self):
+        """Show or hide the emoji picker popup near the emoji button."""
+        if hasattr(self, '_emoji_popup') and self._emoji_popup is not None:
+            self._emoji_popup.close()
+            self._emoji_popup = None
             return
-
-
-        transliterated = transliterate_to_russian(
-
-            current_text
-
+        from PySide6.QtWidgets import QWidget, QGridLayout, QPushButton
+        from PySide6.QtCore import Qt
+        popup = QWidget(self, Qt.Popup)
+        popup.setStyleSheet(
+            "background-color: #1a1e2e; border: 1px solid #3c456b;"
+            "border-radius: 6px; padding: 6px;"
         )
-
-
-        self.message_input.setText(
-
-            transliterated
-
+        grid = QGridLayout(popup)
+        grid.setSpacing(2)
+        emoji_sets = [
+            list(range(0x1F600, 0x1F64F+1)),
+            list(range(0x1F300, 0x1F5FF+1)),
+            list(range(0x1F680, 0x1F6FF+1)),
+            list(range(0x2600, 0x26FF+1)),
+            list(range(0x2700, 0x27BF+1)),
+        ]
+        all_emoji = []
+        for s in emoji_sets:
+            all_emoji.extend(s)
+        cols = 10
+        for i, code in enumerate(all_emoji[:80]):
+            em = chr(code)
+            btn = QPushButton(em)
+            btn.setFixedSize(32, 32)
+            btn.setStyleSheet(
+                "font-size: 18px; border: none; background: transparent;"
+            )
+            btn.clicked.connect(
+                lambda checked=False, e=em: self._insert_emoji(e)
+            )
+            grid.addWidget(btn, i // cols, i % cols)
+        self._emoji_popup = popup
+        btn_pos = self.emoji_button.mapToGlobal(
+            self.emoji_button.rect().bottomLeft()
         )
+        popup.move(btn_pos)
+        popup.show()
 
-
-    def toggle_auto_translit(
-
-        self,
-
-        checked
-
-    ):
-
-        if checked:
-
-            self.auto_translit_button.setText(
-
-                "AUTO ON"
-
-            )
-
-        else:
-
-            self.auto_translit_button.setText(
-
-                "AUTO"
-
-            )
-
+    def _insert_emoji(self, emoji):
+        """Insert an emoji character at the cursor position."""
+        self.message_input.insert(emoji)
+        self.message_input.setFocus()
+        if hasattr(self, '_emoji_popup') and self._emoji_popup is not None:
+            self._emoji_popup.close()
+            self._emoji_popup = None
 
     def chat_connected(
 

@@ -1,3 +1,4 @@
+from logger import debug
 from PySide6.QtWidgets import QMessageBox
 from .theme import Theme
 
@@ -181,10 +182,28 @@ class MainMenuStreamState:
         )
 
 
-        # If nothing is currently playing, auto-start the top live channel.
-        # This ensures the video window actually plays the stream the UI
-        # is displaying, instead of staying blank until the user clicks.
-        if not self.current_channel and streams:
+        self.update_next_stream()
+
+
+        self.dispatcher_panel.set_status(
+            f"{len(streams)} channels live"
+        )
+
+
+        self.log(
+            f"Found {len(streams)} live channels."
+        )
+
+
+        # Resume the last-viewed streamer BEFORE auto-starting the top
+        # channel.  This way the saved channel gets priority over the
+        # auto-start fallback.
+        self.try_resume_last_streamer()
+
+
+        # If nothing is currently playing and no resume is in progress,
+        # auto-start the top live channel.
+        if not self.current_channel and not self.pending_channel and streams:
 
             top = streams[0]
 
@@ -200,22 +219,6 @@ class MainMenuStreamState:
                     channel,
                     manual=False
                 )
-
-
-        self.update_next_stream()
-
-
-        self.dispatcher_panel.set_status(
-            f"{len(streams)} channels live"
-        )
-
-
-        self.log(
-            f"Found {len(streams)} live channels."
-        )
-
-
-        self.try_resume_last_streamer()
 
 
 
@@ -527,6 +530,58 @@ class MainMenuStreamState:
             return
 
 
+        # Resolve broadcaster ID from current stream data.
+        broadcaster_id = None
+        if self.current_stream:
+            broadcaster_id = (
+                self.current_stream.get("broadcaster_id")
+                or self.current_stream.get("user_id")
+            )
+
+        # --- Load third-party emotes for the channel (background) ---
+        self._ensure_emote_resolver()
+        if self._emote_resolver is not None:
+            from core import run_in_background
+            ch = channel
+            run_in_background(
+                lambda: self._emote_resolver.update(ch),
+                lambda _: None,
+                lambda e: debug(f"[EMOTES] Background fetch error: {e}"),
+            )
+            self.chat_panel.chat_widget._emote_resolver = self._emote_resolver
+
+        # --- Load channel avatar (background) ---
+        avatar_url = self.avatar_cache.get(f"twitch:{channel}")
+        if avatar_url:
+            self.chat_panel.set_avatar(avatar_url)
+        else:
+            from core import run_in_background
+            ch = channel
+            run_in_background(
+                lambda: self._fetch_chat_avatar(ch),
+                lambda url: self.chat_panel.set_avatar(url),
+                lambda e: debug(f"[CHAT AVATAR] Fetch error: {e}"),
+            )
+
+        # --- Fetch chat badges + channel info (background) ---
+        if broadcaster_id:
+            from core import run_in_background
+            bid = broadcaster_id
+            cw = self.chat_panel.chat_widget
+            # Set broadcaster_id so badges can be fetched.
+            cw._broadcaster_id = bid
+            run_in_background(
+                lambda: cw.fetch_channel_badges(bid),
+                lambda _: None,
+                lambda e: debug(f"[CHAT BADGES] Fetch error: {e}"),
+            )
+            # Fetch channel info for the info strip.
+            run_in_background(
+                lambda: self._fetch_channel_chat_info(channel, bid),
+                lambda info: self.chat_panel.set_channel_info(**info),
+                lambda e: debug(f"[CHAT INFO] Fetch error: {e}"),
+            )
+
         self.chat_panel.connect_chat(
             channel
         )
@@ -535,6 +590,51 @@ class MainMenuStreamState:
         self.log(
             f"Chat connecting to #{channel}"
         )
+
+    # ------------------------------------------------------------------
+    # Emote resolver helper
+    # ------------------------------------------------------------------
+
+    def _ensure_emote_resolver(self):
+        """Create the EmoteResolver singleton if it doesn't exist yet."""
+        if getattr(self, "_emote_resolver", None) is not None:
+            return
+        try:
+            from .chatpanel import EmoteResolver
+            self._emote_resolver = EmoteResolver()
+        except Exception as exc:
+            debug(f"[EMOTES] Failed to create EmoteResolver: {exc}")
+            self._emote_resolver = None
+
+    def _fetch_chat_avatar(self, channel):
+        """Fetch the avatar URL for a Twitch channel (blocking call)."""
+        try:
+            profile = self.api.get_user_profile(channel)
+            url = profile.get("profile_image_url", "")
+            if url:
+                self.avatar_cache[f"twitch:{channel}"] = url
+                return url
+        except Exception as exc:
+            debug(f"[CHAT AVATAR] Failed to fetch avatar for {channel}: {exc}")
+        return ""
+
+    def _fetch_channel_chat_info(self, channel, broadcaster_id):
+        """Fetch stream info + reward count for the chat info strip (blocking).
+        Returns a dict suitable for ``ChatPanel.set_channel_info()``."""
+        info = {"game": "", "viewers": 0, "reward_count": 0}
+        try:
+            stream = self.api.get_stream_info(channel)
+            if stream:
+                info["game"] = stream.get("game_name", "")
+                info["viewers"] = stream.get("viewer_count", 0)
+        except Exception as exc:
+            debug(f"[CHAT INFO] Stream info fetch error: {exc}")
+        try:
+            rewards = self.api.get_channel_rewards(broadcaster_id)
+            info["reward_count"] = len(rewards)
+        except Exception as exc:
+            debug(f"[CHAT INFO] Rewards fetch error: {exc}")
+        return info
 
 
 

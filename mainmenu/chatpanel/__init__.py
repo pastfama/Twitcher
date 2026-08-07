@@ -1,8 +1,5 @@
-"""Chat Panel package.
-
-Provides the Twitch chat widget integrated into the main interface.
-"""
-
+"""Chat Panel package."""
 from .panel import ChatPanel
+from .emotes import EmoteResolver
 
-__all__ = ["ChatPanel"]
+__all__ = ["ChatPanel", "EmoteResolver"]
