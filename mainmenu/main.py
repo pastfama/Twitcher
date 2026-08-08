@@ -1,5 +1,5 @@
 import os
-from PySide6.QtCore import QSettings, Signal, QObject, Qt, QTimer
+from PySide6.QtCore import QSettings, Signal, QObject, Qt, QTimer, QMetaObject, Qt
 from PySide6.QtWidgets import QMainWindow
 from logger import debug
 from video import VideoWindow
@@ -18,7 +18,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 class _AnalyticsBridge(QObject):
     analytics_updated = Signal(object, object)  # stream, analysis
-    widget_update = Signal(str, dict)  # login, data
 class MainMenu(
     QMainWindow,
     MainMenuWindowState,
@@ -46,7 +45,6 @@ class MainMenu(
         self.log_window = None
         self._analytics_bridge = _AnalyticsBridge()
         self._analytics_bridge.analytics_updated.connect(self._on_analytics_signal, Qt.QueuedConnection)
-        self._analytics_bridge.widget_update.connect(self._update_widget_on_main_thread, Qt.QueuedConnection)
         #
         # Analytics system
         #
@@ -143,8 +141,8 @@ class MainMenu(
     def _on_external_data_ready(self, login: str, platform: str, data: Dict[str, Any]):
         """Handle external data ready signal from AnalyticsEngine.
         
-        This is called from background thread. Emits a Qt signal to safely
-        update the widget on the main UI thread.
+        Called from background thread. Uses Qt.QueuedConnection to safely
+        update widget on main UI thread.
         """
         # STRICT guard: only update widget for the current channel
         if not self.current_channel:
@@ -153,30 +151,26 @@ class MainMenu(
         if login != self.current_channel:
             return
         
-        # Emit signal to update widget on main thread (thread-safe)
-        self._analytics_bridge.widget_update.emit(login, data)
+        # Schedule widget update on main thread (thread-safe)
+        QMetaObject.invokeMethod(
+            self,
+            "_update_widget_safely",
+            Qt.QueuedConnection,
+            Q_ARG(str, login),
+            Q_ARG(object, data),
+        )
     
-    def _update_widget_on_main_thread(self, login: str, data: Dict[str, Any]):
-        """Update widget - runs on main Qt thread via signal."""
+    @QMetaObject.invokeMethod
+    def _update_widget_safely(self, login: str, data: Dict[str, Any]):
+        """Update widget - guaranteed to run on main Qt thread."""
         if hasattr(self, 'current_panel') and self.current_panel:
             try:
-                # Get viewer count for score calculation
-                viewer_count = 0
-                if self.current_stream:
-                    viewer_count = int(self.current_stream.get("viewer_count", 0))
+                # Store data in panel
+                self.current_panel._latest_sully_data = data
                 
-                # Build analysis dict for score calculation
-                analysis = {
-                    "channel": login,
-                    "sullygoose": data,
-                    "score": self.analytics_engine.calculate_score({
-                        "viewers": viewer_count,
-                        "sullygoose": data,
-                    }),
-                }
-                # Pass both data and analysis to widget
-                self.current_panel.sully_widget.update_metrics(data, analysis=analysis)
-                debug(f"[MAIN MENU] Updated SullyGoose widget for {login} (score={analysis['score']})")
+                # Update widget
+                self.current_panel.sully_widget.update_metrics(data)
+                debug(f"[MAIN MENU] Updated SullyGoose widget for {login}")
             except Exception as e:
                 debug(f"[MAIN MENU] Widget update error: {e}")
     
