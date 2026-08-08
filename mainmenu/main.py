@@ -143,7 +143,9 @@ class MainMenu(
         if not self.current_channel:
             return
         
+        # Verify the login matches the current channel
         if login != self.current_channel:
+            debug(f"[MAIN MENU] Discarding data for '{login}' (current: '{self.current_channel}')")
             return
         
         # Schedule widget update on main thread (thread-safe)
