@@ -217,21 +217,13 @@ class SullyGooseWidget(QFrame):
     def update_metrics(self, sully, analysis=None, trend_data=None, current_channel=None):
         """Update with SullyGnome data and optional Twitch trend data
         
-        Added: current_channel parameter to verify data belongs to the current channel
+        Note: current_channel guard removed - widget receives data via signal
+        which already ensures only current channel data is delivered.
         """
         # 1. First update with SullyGnome data (existing functionality)
         if not sully:
             self._clear()
             return
-            
-        # Verify this data belongs to the current channel
-        if current_channel:
-            # Get channel identifier from sully data (if available)
-            sully_login = sully.get('login') or sully.get('channel') or sully.get('user_login')
-            if sully_login and sully_login != current_channel:
-                # Data doesn't match current channel, skip update
-                logger.warning(f"Data mismatch: Expected channel {current_channel}, got {sully_login}")
-                return
                 
         # Log all received metrics for debugging
         logger.debug(f"Received SullyGoose data: {sully}")
