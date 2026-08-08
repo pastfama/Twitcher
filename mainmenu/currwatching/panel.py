@@ -137,7 +137,16 @@ class CurrentWatchingPanel(QFrame):
         # Update SullyGoose widget directly.
         sully = analysis.get("sullygoose", {}) if analysis else {}
         if hasattr(self, 'sully_widget') and self.sully_widget:
-            self.sully_widget.update_metrics(sully, analysis)
+            # Pass current channel to guard against stale cross-channel data.
+            current_channel = self._current_channel_name()
+            self.sully_widget.update_metrics(sully, analysis, current_channel=current_channel)
+
+    def _current_channel_name(self):
+        """Return the login name of the currently displayed channel, or empty string."""
+        text = self.channel_label.text()
+        if text and text.startswith("#"):
+            return text[1:].lower().strip()
+        return ""
 
     def _clear_sullygoose(self):
 

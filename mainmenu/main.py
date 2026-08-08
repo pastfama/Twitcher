@@ -11,7 +11,8 @@ from .dispatcher_panel import DispatcherPanel
 from .livefollowed import LiveFollowedPanel
 from .chatpanel import ChatPanel
 from .nextstream import NextStreamPanel
-from core.analytics_engine import AnalyticsEngine
+import core.db as db
+from core.analytics_engine_v2 import AnalyticsEngine
 from .window_state import MainMenuWindowState
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
@@ -48,9 +49,13 @@ class MainMenu(
         # Analytics system
         #
         self.viewer_tracker = ViewerTracker()
-        self.analytics_engine = AnalyticsEngine(
-            viewer_tracker=self.viewer_tracker,
-            on_analytics_updated=lambda stream, analysis: self._analytics_bridge.analytics_updated.emit(stream, analysis)
+        # Initialize new AnalyticsEngine with AnalyticsDB
+        from core.analytics_db import AnalyticsDB
+        analytics_db = AnalyticsDB()
+        self.analytics_engine = AnalyticsEngine(db=analytics_db)
+        # Connect signal for UI updates
+        self.analytics_engine.add_listener(
+            lambda login, platform, data: self._on_external_data_ready(login, platform, data)
         )
         #
         # Viewer Monitor (owns its own QTimer)
@@ -99,7 +104,7 @@ class MainMenu(
         #
         # Video auto-play timer (highest priority)
         self._video_timer = QTimer(self)
-        self._video_timer.setInterval(4000)
+        self._video_timer.setInterval(500)  # 0.5s - faster video auto-play check
         self._video_timer.timeout.connect(self._auto_play_video)
         self._video_timer.start()
         # NOTE: The old 30-second SG fetch timer (_sg_timer) was removed.
@@ -119,7 +124,7 @@ class MainMenu(
         QTimer.singleShot(500, self._momsg_timer.start)
         # Live channels refresh timer
         self._live_timer = QTimer(self)
-        self._live_timer.setInterval(4000)
+        self._live_timer.setInterval(3000)  # 3s - live channels refresh
         self._live_timer.timeout.connect(self._refresh_live_channels)
         self._live_timer.start()
         self.viewer_monitor.start()
@@ -130,6 +135,27 @@ class MainMenu(
         # immediately without waiting for Twitch API responses.
         self._load_cached_streamer_data()
         self.load_twitch()
+    def _on_external_data_ready(self, login: str, platform: str, data: Dict[str, Any]):
+        """Handle external data ready signal from AnalyticsEngine.
+        
+        This is called when background fetch completes. Updates the
+        current panel if the data is for the current channel.
+        """
+        debug(f"[MAIN MENU] External data ready: {login} ({platform})")
+        
+        # Only process if this is for the current channel
+        if self.current_channel and login != self.current_channel:
+            debug(f"[MAIN MENU] Discarding data for non-current channel '{login}'")
+            return
+        
+        # Update the current panel's analytics
+        if hasattr(self, 'current_panel') and self.current_panel:
+            # Format data for the SullyGoose widget
+            widget_data = self.analytics_engine.get_widget_data(login, "sullygoose")
+            if widget_data:
+                self.current_panel.sully_widget.update_metrics(widget_data)
+                debug(f"[MAIN MENU] Updated SullyGoose widget for {login}")
+    
     def _on_analytics_signal(self, stream, analysis):
         """Handle analytics update from background thread via signal."""
         debug(f"[MAIN MENU] _on_analytics_signal: stream={stream.get('user_login') if stream else None}, has_sullygoose={'sullygoose' in (analysis or {})}")
@@ -181,15 +207,19 @@ class MainMenu(
         except Exception as e:
             debug(f"[VIDEO] Auto-play error: {e}")
     def _fetch_sg_data(self):
-        """Fetch SullyGoose data for all live channels."""
+        """Fetch analytics data for the CURRENT channel only."""
         try:
-            self.analytics_engine.fetch_all_live_channels(self._fetch_live_channels())
+            # Only fetch for current channel to avoid lag
+            if self.current_channel:
+                self.analytics_engine.get_external_data(self.current_channel, platform="twitch")
         except Exception as e:
             debug(f"[SG] Fetch error: {e}")
     def _refresh_momsg(self):
         """Refresh MOM and SG widgets every 4 seconds."""
         if hasattr(self, 'current_panel') and self.current_panel:
             self.current_panel.refresh_momsg(self.current_stream, self.current_panel.viewer_analysis)
+        # Trigger background fetch for analytics data
+        self._fetch_sg_data()
     def _refresh_live_channels(self):
         """Periodically refresh the live channels list from Twitch API."""
         if self.is_closing or not self.user:

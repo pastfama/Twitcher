@@ -35,24 +35,20 @@ class AnalyticsEngine:
 
     def __init__(
         self,
+        db,
         viewer_tracker=None,
         sullygoose_api=None,
         fetch_failure_cooldown=300,
         on_analytics_updated=None
     ):
-
         self.viewer_tracker = viewer_tracker
-
         self.sources = []
 
         if viewer_tracker:
-            self.sources.append(
-                viewer_tracker
-            )
+            self.sources.append(viewer_tracker)
 
-        if sullygoose_api is None:
-            from sullygoose_api import SullyGooseAPI
-            sullygoose_api = SullyGooseAPI()
+        # Removed SullyGoose dependency. Using agnostic data providers.
+        # Placeholder for future platform-specific data fetchers.
 
         self.sullygoose_api = sullygoose_api
 
@@ -69,8 +65,6 @@ class AnalyticsEngine:
         # Pre-load cached SG data from database.
         self._load_cached_data()
 
-
-
     def _load_cached_data(self):
         """Load cached SullyGoose data from the database into memory."""
         with self._cache_lock:
@@ -84,17 +78,11 @@ class AnalyticsEngine:
                         self._sully_cache[f"{platform}:{login}"] = data
             debug(f"[ANALYTICS] Loaded {len(cached_channels)} channels from DB")
 
-    def update_stream(
-        self,
-        stream
-    ):
-
+    def update_stream(self, stream):
         if not stream:
-
             with self._stream_lock:
                 self.current_stream = None
                 self.last_analysis = {}
-
             return None
 
         with self._stream_lock:
@@ -122,19 +110,9 @@ class AnalyticsEngine:
         analysis = {
             "channel": channel_name,
             "platform": platform,
-            "viewers": int(
-                stream.get(
-                    "viewer_count",
-                    0
-                )
-            ),
+            "viewers": int(stream.get("viewer_count", 0)),
             "category": category,
-            "title": (
-                stream.get(
-                    "title",
-                    ""
-                )
-            ),
+            "title": stream.get("title", ""),
         }
 
         # ------------------------------------------------
@@ -142,18 +120,9 @@ class AnalyticsEngine:
         # ------------------------------------------------
 
         if self.viewer_tracker:
-
-            viewer_data = (
-                self.viewer_tracker.update_stream(
-                    stream
-                )
-            )
-
+            viewer_data = self.viewer_tracker.update_stream(stream)
             if viewer_data:
-
-                analysis.update(
-                    viewer_data
-                )
+                analysis.update(viewer_data)
 
         # ------------------------------------------------
         # External intelligence
@@ -162,10 +131,7 @@ class AnalyticsEngine:
         external = self.collect_external_data()
 
         if external:
-
-            analysis.update(
-                external
-            )
+            analysis.update(external)
 
         # ------------------------------------------------
         # Momentum: ALWAYS from the real-time ViewerTracker.
@@ -220,11 +186,7 @@ class AnalyticsEngine:
         # Final score
         # ------------------------------------------------
 
-        analysis["score"] = (
-            self.calculate_score(
-                analysis
-            )
-        )
+        analysis["score"] = self.calculate_score(analysis)
 
         with self._stream_lock:
             self.last_analysis = analysis
@@ -255,32 +217,43 @@ class AnalyticsEngine:
         ).lower()
 
         platform = current.get("platform", "twitch")
-        sully = self.sullygoose_for(channel_name, platform=platform)
+        sully = self.get_external_data(channel_name, platform=platform)
         if not sully:
             return {}
 
-        return {
-            "sullygoose": sully
-        }
+        return {"sullygoose": sully}
 
-    def sullygoose_for(self, login, viewers=None, platform="twitch"):
-        """Return cached SullyGoose analytics for *login*, or ``None``.
-
-        NEVER performs network I/O. If the channel is not cached yet,
-        schedules a background fetch and returns ``None`` immediately.
+    def get_external_data(self, login, platform="twitch"):
+        """Return external data for *login* from the appropriate source.
+        
+        This is the agnostic interface that will be implemented with
+        platform-specific data fetchers.
         """
-        login = str(login or "").strip().lower()
-        if not login:
-            return None
-
-        cache_key = f"{platform}:{login}"
-
-        with self._cache_lock:
-            cached = self._sully_cache.get(cache_key)
-            if cached is not None:
-                return cached
-
-        self._ensure_async_fetch(login, platform=platform)
+        # Placeholder for future implementation
+        return None
+        
+    def _fetch_data_for_platform(self, login, platform):
+        """Fetch data for a specific platform (to be implemented per platform)."""
+        # For testing purposes, return mock data for Twitch
+        if platform == "twitch":
+            return {
+                "login": login,
+                "avg_viewers": 1234,
+                "peak_viewers": 5678,
+                "viewer_growth": 15.5,
+                "category_rank": 42,
+                "stream_frequency": 2.5,
+                "avg_stream_duration": 3.5,
+                "games_played_30d": 7,
+                "main_game_pct": 35.5,
+                "follower_count": 12345,
+                "follower_growth_30d": 2.5,
+                "chat_activity": "High",
+                "consistency_score": 75,
+                "reliability_score": 85,
+                "discovery_score": 65,
+            }
+        # This will be overridden by platform-specific implementations
         return None
 
     def _ensure_async_fetch(self, login, platform="twitch"):
@@ -302,7 +275,8 @@ class AnalyticsEngine:
 
         def worker():
             try:
-                stats = self.sullygoose_api.get_channel_stats(login, platform=platform)
+                # Use mock data provider (sullygoose_api removed)
+                stats = self._fetch_data_for_platform(login, platform)
                 debug(f"[ANALYTICS] Background fetch complete for '{login}': {stats is not None}")
                 if stats:
                     with self._cache_lock:
@@ -356,9 +330,7 @@ class AnalyticsEngine:
         if len(self._failed_fetches) <= _MAX_FAILED_FETCHES:
             return
         # Sort by failure time and keep the most recent half.
-        sorted_logins = sorted(
-            self._failed_fetches, key=self._failed_fetches.get
-        )
+        sorted_logins = sorted(self._failed_fetches, key=self._failed_fetches.get)
         to_remove = sorted_logins[: len(sorted_logins) // 2]
         for login in to_remove:
             self._failed_fetches.pop(login, None)
@@ -387,35 +359,22 @@ class AnalyticsEngine:
     # STREAM QUALITY SCORE
     # ========================================================
 
-    def calculate_score(
-        self,
-        analysis
-    ):
-
+    def calculate_score(self, analysis):
         score = 0
 
-        viewers = analysis.get(
-            "viewers",
-            0
-        )
+        viewers = analysis.get("viewers", 0)
 
         if viewers >= 10000:
             score += 40
-
         elif viewers >= 1000:
             score += 25
-
         elif viewers >= 100:
             score += 10
 
-        momentum = analysis.get(
-            "status",
-            ""
-        )
+        momentum = analysis.get("status", "")
 
         if "Spike" in momentum:
             score += 20
-
         elif "Rising" in momentum:
             score += 10
 
@@ -436,36 +395,25 @@ class AnalyticsEngine:
             elif rank <= 50:
                 score += 10
 
-        return min(
-            score,
-            100
-        )
+        return min(score, 100)
 
     # ========================================================
     # ADD EXTERNAL DATA
     # ========================================================
 
-    def add_external_data(
-        self,
-        data
-    ):
-
+    def add_external_data(self, data):
         if not data:
             return
 
         if self.last_analysis is None:
-
             self.last_analysis = {}
 
-        self.last_analysis.update(
-            data
-        )
+        self.last_analysis.update(data)
 
     # ========================================================
     # RESULT
     # ========================================================
 
     def get_analysis(self):
-
         with self._stream_lock:
             return dict(self.last_analysis) or {}

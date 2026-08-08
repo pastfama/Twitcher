@@ -168,6 +168,7 @@ scopes:
   request:
     - "user:read:follows"
     - "user:read:email"
+    - "user:read:chat_settings"
     - "chat:read"
     - "chat:edit"
     - "channel:read:subscriptions"

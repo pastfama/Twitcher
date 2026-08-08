@@ -61,14 +61,71 @@ def init_db():
             )
         """)
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS sullygoose (
+            CREATE TABLE IF NOT EXISTS channels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                login TEXT NOT NULL,
+                platform TEXT NOT NULL CHECK(platform IN ('twitch','youtube')),
+                is_followed BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(login, platform)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sullygoose_scrapes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id INTEGER NOT NULL,
+                scraped_at TIMESTAMP NOT NULL,
+                status TEXT CHECK(status IN ('success', 'partial', 'failed')) DEFAULT 'success',
+                error TEXT,
+                response_time_ms INTEGER,
+                raw_html BLOB,
+                metrics JSON NOT NULL,
+                FOREIGN KEY(channel_id) REFERENCES channels(id) ON DELETE CASCADE
+            )
+        """)
+        # Keep existing viewer_history table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS viewer_history (
                 platform TEXT NOT NULL DEFAULT 'twitch',
                 login TEXT NOT NULL,
-                stats TEXT,
-                last_updated TEXT,
+                ts TEXT,
+                viewers INTEGER,
+                PRIMARY KEY (platform, login, ts)
+            )
+        """)
+        # Keep existing channel_history table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS channel_history (
+                platform TEXT NOT NULL DEFAULT 'twitch',
+                login TEXT NOT NULL,
+                last_played TEXT,
+                play_count INTEGER DEFAULT 0,
                 PRIMARY KEY (platform, login)
             )
         """)
+        # Keep existing watchlist table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS watchlist (
+                platform TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                added_at TEXT,
+                PRIMARY KEY (platform, channel)
+            )
+        """)
+        # Keep existing settings table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated TEXT
+            )
+        """)
+        # Create indexes for new tables
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_scrapes_channel ON sullygoose_scrapes(channel_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_scrapes_time ON sullygoose_scrapes(scraped_at)")
+        
+        # Migrate existing data
+        _migrate_legacy_schema(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS viewer_history (
                 platform TEXT NOT NULL DEFAULT 'twitch',
@@ -325,47 +382,89 @@ def list_streamers(platform=None):
 # SULLYGOOSE ANALYTICS (replaces sg_cache.py)
 # ================================================================
 
-def store_sg(login, stats, platform="twitch"):
-    """Store SullyGoose analytics for a channel."""
-    platform = str(platform or "twitch").lower().strip()
-    login = str(login or "").lower().strip()
-    if not login or not stats:
+def get_channel_id(login, platform):
+    """Get channel ID from channels table, create if needed"""
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT id FROM channels WHERE login = ? AND platform = ?",
+            (login, platform)
+        ).fetchone()
+        if row:
+            return row[0]
+        # Create channel if not exists
+        return conn.execute(
+            "INSERT INTO channels (login, platform) VALUES (?, ?)",
+            (login, platform)
+        ).lastrowid
+
+def store_sg(login, stats, platform="twitch", status="success", error=None, response_time_ms=None, raw_html=None):
+    """Store SullyGoose analytics for a channel in the new schema"""
+    channel_id = get_channel_id(login, platform)
+    if not channel_id:
         return
+        
     with _db() as conn:
         conn.execute(
-            "INSERT OR REPLACE INTO sullygoose (platform, login, stats, last_updated) VALUES (?, ?, ?, ?)",
-            (platform, login, json.dumps(stats), _now_iso())
+            "INSERT INTO sullygoose_scrapes (channel_id, scraped_at, status, error, response_time_ms, raw_html, metrics) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (channel_id, _now_iso(), status, error, response_time_ms, raw_html, json.dumps(stats))
         )
 
 
 def get_sg(login, platform="twitch"):
-    """Return SullyGoose analytics for a channel, or None."""
+    """Return most recent SullyGoose analytics for a channel, or None."""
     platform = str(platform or "twitch").lower().strip()
     login = str(login or "").lower().strip()
     if not login:
         return None
+    # Read from the new schema — join channels to find latest scrape.
     with _db() as conn:
         row = conn.execute(
-            "SELECT stats FROM sullygoose WHERE platform = ? AND login = ?", (platform, login)
+            """
+            SELECT s.metrics, s.scraped_at, s.status, s.response_time_ms
+            FROM sullygoose_scrapes s
+            JOIN channels c ON c.id = s.channel_id
+            WHERE c.login = ? AND c.platform = ?
+            ORDER BY s.scraped_at DESC
+            LIMIT 1
+            """,
+            (login, platform),
         ).fetchone()
     if not row:
         return None
     try:
-        return json.loads(row["stats"])
+        stats = json.loads(row["metrics"])
     except Exception:
         return None
+    # Merge in metadata fields the widget/client rely on.
+    stats["scraped_at"] = row["scraped_at"]
+    stats["status"] = row["status"]
+    stats["response_time_ms"] = row["response_time_ms"]
+    return stats
 
 
 def list_sg_channels(platform=None):
-    """Return all channels with cached SullyGoose data."""
+    """Return all channels with cached SullyGoose data (from scraps with data)."""
     with _db() as conn:
         if platform:
             rows = conn.execute(
-                "SELECT platform, login, last_updated FROM sullygoose WHERE platform = ?",
+                """
+                SELECT c.platform, c.login, MAX(s.scraped_at) AS last_updated
+                FROM sullygoose_scrapes s
+                JOIN channels c ON c.id = s.channel_id
+                WHERE c.platform = ?
+                GROUP BY c.platform, c.login
+                """,
                 (str(platform).lower().strip(),)
             ).fetchall()
         else:
-            rows = conn.execute("SELECT platform, login, last_updated FROM sullygoose").fetchall()
+            rows = conn.execute(
+                """
+                SELECT c.platform, c.login, MAX(s.scraped_at) AS last_updated
+                FROM sullygoose_scrapes s
+                JOIN channels c ON c.id = s.channel_id
+                GROUP BY c.platform, c.login
+                """
+            ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -475,6 +574,36 @@ def clear_channel_history():
     with _db() as conn:
         conn.execute("DELETE FROM channel_history")
 
+
+def get_db_size():
+    """Return current database size in bytes"""
+    return os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
+
+def enforce_sullygoose_cap(new_data_size=0):
+    """Ensure SullyGnome data never exceeds 50GB"""
+    MAX_SIZE = 50 * 1024 * 1024 * 1024  # 50GB in bytes
+    current_size = get_db_size()
+    
+    # Only check if we're near the limit
+    if current_size + new_data_size < MAX_SIZE * 0.95:
+        return
+        
+    # Calculate target size (leave 5% buffer)
+    target_size = MAX_SIZE * 0.9
+    
+    # Delete oldest scrapes until under target
+    with _db() as conn:
+        while get_db_size() > target_size:
+            result = conn.execute('''
+                DELETE FROM sullygoose_scrapes
+                WHERE id IN (
+                    SELECT id FROM sullygoose_scrapes
+                    ORDER BY scraped_at ASC
+                    LIMIT 100
+                )
+            ''')
+            if result.rowcount == 0:
+                break
 
 # Initialize the database on import.
 init_db()

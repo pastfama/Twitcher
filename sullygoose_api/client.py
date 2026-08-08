@@ -43,15 +43,14 @@ class SullyGooseAPIError(RuntimeError):
 class SullyGooseAPI:
     """Tokenless analytics client for sullygnome.com."""
 
-    def __init__(self, timeout=8, cache_ttl=300):
+    def __init__(self, db, timeout=8, cache_ttl=300):
+        self.db = db
         self.timeout = timeout
         self.cache_ttl = cache_ttl
-        self._cache = {}
-        self._lock = threading.Lock()
 
     def get_channel_stats(self, login, platform="twitch"):
         """Return analytics dict for *login*, or ``None`` if unavailable.
-
+        
         Args:
             login: Channel name or ID
             platform: "twitch" or "youtube" (SullyGnome supports both)
@@ -60,37 +59,69 @@ class SullyGooseAPI:
         if not login:
             debug("[SULLYGOOSE] get_channel_stats called with empty login")
             return None
-
+            
         # Kick is not supported by SullyGnome
         if platform == "kick":
             debug(f"[SULLYGOOSE] Kick not supported by SullyGnome")
             return None
-
-        cache_key = f"{platform}:{login}"
-
-        with self._lock:
-            cached = self._cache.get(cache_key)
-            if cached:
-                timestamp, stats = cached
-                if time.time() - timestamp < self.cache_ttl:
-                    debug(f"[SULLYGOOSE] Cache hit for '{login}' ({platform})")
-                    return stats
-
-        debug(f"[SULLYGOOSE] Fetching stats for '{login}' ({platform}) from sullygnome.com...")
+            
+        # Build URL based on platform
+        if platform == "youtube":
+            url = SULLYGNOME_YOUTUBE_URL.format(login=login)
+        else:
+            url = SULLYGNOME_CHANNEL_URL.format(login=login)
+            
+        debug(f"[SULLYGOOSE] GET {url}")
         try:
-            stats = self._scrape_channel(login, platform)
+            response = requests.get(url, headers=DEFAULT_HEADERS, timeout=self.timeout)
+            debug(f"[SULLYGOOSE] HTTP {response.status_code} for '{login}'")
+            
+            if response.status_code != 200:
+                raise SullyGooseAPIError(
+                    f"SullyGnome returned HTTP {response.status_code} for {login}"
+                )
+                
+            html = response.text
+            stats = self._parse_channel_html(html, login)
+            
+            if stats:
+                stats["platform"] = platform
+                # Store in database
+                self.db.store_sg(
+                    login=login,
+                    stats=stats,
+                    platform=platform,
+                    status="success",
+                    raw_html=html,
+                    response_time_ms=self.timeout * 1000
+                )
+                debug(f"[SULLYGOOSE] Stored stats for '{login}' ({platform}) in DB: {len(stats)} metrics")
+                return stats
+            else:
+                debug(f"[SULLYGOOSE] No usable stats parsed for '{login}' ({platform})")
+                # Store empty stats with failure status
+                self.db.store_sg(
+                    login=login,
+                    stats={},
+                    platform=platform,
+                    status="partial",
+                    raw_html=html,
+                    response_time_ms=self.timeout * 1000
+                )
+                return None
+                
         except Exception as exc:
             debug(f"[SULLYGOOSE] Fetch failed for '{login}' ({platform}): {exc}")
+            # Store error in DB
+            self.db.store_sg(
+                login=login,
+                stats={},
+                platform=platform,
+                status="failed",
+                error=str(exc),
+                response_time_ms=self.timeout * 1000
+            )
             return None
-
-        if stats:
-            stats["platform"] = platform
-            with self._lock:
-                self._cache[cache_key] = (time.time(), stats)
-            debug(f"[SULLYGOOSE] Cached stats for '{login}' ({platform}): {len(stats)} metrics")
-        else:
-            debug(f"[SULLYGOOSE] No usable stats parsed for '{login}' ({platform})")
-        return stats
 
     def _scrape_channel(self, login, platform="twitch"):
         if platform == "youtube":
@@ -135,8 +166,12 @@ class SullyGooseAPI:
         summary = self._parse_summary_paragraphs(soup)
         game_info = self._parse_game_info(soup)
 
-        avg_viewers = stats_blocks.get("average_viewers") or summary.get("avg_viewers", 0)
-        peak_viewers = stats_blocks.get("peak_viewers") or summary.get("peak_viewers", 0)
+        avg_viewers = stats_blocks.get("average_viewers")
+        if avg_viewers is None:
+            avg_viewers = summary.get("avg_viewers", 0)
+        peak_viewers = stats_blocks.get("peak_viewers")
+        if peak_viewers is None:
+            peak_viewers = summary.get("peak_viewers", 0)
 
         stats = self._empty_stats(login)
         stats.update({
@@ -347,9 +382,9 @@ class SullyGooseAPI:
             text_lower = text.lower()
 
             # Skip parent divs that contain multiple stat blocks.
-            # Individual stat blocks are short (< 80 chars);
+            # Individual stat blocks are short (< 200 chars);
             # parent divs concatenate all stats and are much longer.
-            if len(text) > 80:
+            if len(text) > 200:
                 continue
 
             for label, key in stat_map.items():
@@ -388,6 +423,7 @@ class SullyGooseAPI:
                         except ValueError:
                             pass
 
+        debug(f"[SULLYGOOSE] _parse_stat_blocks result: {result}")
         return result
 
     @staticmethod
@@ -456,6 +492,7 @@ class SullyGooseAPI:
                 except ValueError:
                     pass
 
+        debug(f"[SULLYGOOSE] _parse_summary_paragraphs result: {result}")
         return result
 
     @staticmethod
