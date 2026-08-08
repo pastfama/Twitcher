@@ -323,11 +323,17 @@ class AnalyticsEngine:
         if cache_key in self._external_cache:
             cached = self._external_cache[cache_key]
             if time.time() - cached.get("timestamp", 0) < self._cache_ttl:
+                debug(f"[ANALYTICS] Returning cached data for {login} ({platform})")
                 return cached.get("data")
+            else:
+                # Cache is expired, remove it
+                debug(f"[ANALYTICS] Memory cache expired for {login} ({platform}), checking DB")
+                del self._external_cache[cache_key]
         
         # Check DB cache
         db_cached = self.db.load_channel_stats(login, platform, max_age_seconds=self._cache_ttl)
         if db_cached:
+            debug(f"[ANALYTICS] Returning DB cached data for {login} ({platform})")
             self._external_cache[cache_key] = {
                 "data": db_cached,
                 "timestamp": time.time(),
@@ -335,6 +341,7 @@ class AnalyticsEngine:
             return db_cached
         
         # Trigger background fetch
+        debug(f"[ANALYTICS] No cached data for {login} ({platform}), triggering fetch")
         self._ensure_async_fetch(login, platform)
         return None
     
