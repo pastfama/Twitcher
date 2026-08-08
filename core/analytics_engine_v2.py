@@ -378,6 +378,11 @@ class AnalyticsEngine:
                 debug(f"[ANALYTICS] Skipping {login} ({platform}) - recent failure")
                 return
             
+            # Limit concurrent fetches to prevent overwhelming system
+            if len(self._pending_fetches) >= 5:
+                debug(f"[ANALYTICS] Max concurrent fetches reached (5), queuing {login} ({platform})")
+                return
+            
             self._pending_fetches.add(fetch_key)
             self._last_fetch_times[fetch_key] = now
         
