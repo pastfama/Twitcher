@@ -1,5 +1,5 @@
 import os
-from PySide6.QtCore import QSettings, Signal, QObject, Qt, QTimer, QMetaObject, Qt
+from PySide6.QtCore import QSettings, Signal, QObject, Qt, QTimer, QMetaObject
 from PySide6.QtWidgets import QMainWindow
 from logger import debug
 from video import VideoWindow
@@ -14,10 +14,13 @@ from .nextstream import NextStreamPanel
 import core.db as db
 from core.analytics_engine_v2 import AnalyticsEngine
 from .window_state import MainMenuWindowState
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
+
 class _AnalyticsBridge(QObject):
     analytics_updated = Signal(object, object)  # stream, analysis
+
 class MainMenu(
     QMainWindow,
     MainMenuWindowState,
@@ -107,50 +110,42 @@ class MainMenu(
         #
         # Video auto-play timer (highest priority)
         self._video_timer = QTimer(self)
-        self._video_timer.setInterval(500)  # 0.5s - faster video auto-play check
+        self._video_timer.setInterval(500)
         self._video_timer.timeout.connect(self._auto_play_video)
         self._video_timer.start()
-        # NOTE: The old 30-second SG fetch timer (_sg_timer) was removed.
-        # ViewerMonitor already triggers SullyGoose fetches every 4s per
-        # channel via analytics_engine.update_stream() -> sullygoose_for(),
-        # so the dedicated timer was redundant (P5 fix).
+        # NOTE: The old 30-second SG fetch timer was removed.
+        # ViewerMonitor already triggers SullyGoose fetches via analytics_engine.
         # MOM+SG refresh timer
-        # Staggered: start 500 ms after the ViewerMonitor so that
-        # background channel checks have time to complete and deliver
-        # their results to viewer_analysis before we read it.
-        # Without this stagger, the 4 s timers can fire in an
-        # order where refresh_momsg reads stale analysis from the
-        # previous tick (Fix #7 — timer phase misalignment).
         self._momsg_timer = QTimer(self)
         self._momsg_timer.setInterval(4000)
         self._momsg_timer.timeout.connect(self._refresh_momsg)
         QTimer.singleShot(500, self._momsg_timer.start)
         # Live channels refresh timer
         self._live_timer = QTimer(self)
-        self._live_timer.setInterval(3000)  # 3s - live channels refresh
+        self._live_timer.setInterval(3000)
         self._live_timer.timeout.connect(self._refresh_live_channels)
         self._live_timer.start()
         self.viewer_monitor.start()
         self.log(
             "Viewer monitor started."
         )
-        # Restore cached streamer data into UI panels so they render
-        # immediately without waiting for Twitch API responses.
+        # Restore cached streamer data
         self._load_cached_streamer_data()
         self.load_twitch()
-    def _on_external_data_ready(self, login: str, platform: str, data: Dict[str, Any]):
+
+    def _on_external_data_ready(self, login: str, platform: str, data: dict):
         """Handle external data ready signal from AnalyticsEngine.
         
-        Called from background thread. Uses Qt.QueuedConnection to safely
-        update widget on main UI thread.
+        Called from background thread. Uses QMetaObject.invokeMethod to
+        safely update widget on main UI thread.
         """
         # STRICT guard: only update widget for the current channel
         if not self.current_channel:
             return
-        
+
         if login != self.current_channel:
             return
-        
+
         # Schedule widget update on main thread (thread-safe)
         QMetaObject.invokeMethod(
             self,
@@ -159,29 +154,28 @@ class MainMenu(
             Q_ARG(str, login),
             Q_ARG(object, data),
         )
-    
-    @QMetaObject.invokeMethod
-    def _update_widget_safely(self, login: str, data: Dict[str, Any]):
-        """Update widget - guaranteed to run on main Qt thread."""
+
+    def _update_widget_safely(self, login: str, data: dict):
+        """Update widget - guaranteed to run on main Qt thread.
+
+        Called via QMetaObject.invokeMethod with Qt.QueuedConnection,
+        so this always runs on the main UI thread.
+        """
         if hasattr(self, 'current_panel') and self.current_panel:
             try:
-                # Store data in panel
+                # Store data in panel for persistence
                 self.current_panel._latest_sully_data = data
-                
-                # Update widget
+
+                # Update widget immediately
                 self.current_panel.sully_widget.update_metrics(data)
                 debug(f"[MAIN MENU] Updated SullyGoose widget for {login}")
             except Exception as e:
                 debug(f"[MAIN MENU] Widget update error: {e}")
-    
+
     def _on_analytics_signal(self, stream, analysis):
         """Handle analytics update from background thread via signal."""
         debug(f"[MAIN MENU] _on_analytics_signal: stream={stream.get('user_login') if stream else None}, has_sullygoose={'sullygoose' in (analysis or {})}")
         if stream and analysis:
-            # Guard — only accept analytics for the channel currently
-            # playing in the video window.  SullyGoose fetches are kicked
-            # off for *all* live channels via fetch_all_live_channels,
-            # so the signal can fire for a non-current channel.
             signal_login = str(
                 stream.get("user_login")
                 or stream.get("user_name")
@@ -192,10 +186,6 @@ class MainMenu(
                 if signal_login != self.current_channel:
                     debug(f"[MAIN MENU] Discarding analytics for non-current channel '{signal_login}' (current: '{self.current_channel}')")
                     return
-            # Second guard: the analysis payload carries _fetch_login, the
-            # login the SullyGoose background fetch was actually for.  If
-            # that doesn't match the stream in the signal, the result is
-            # stale cross-channel data and must be discarded (P1 fix).
             fetch_login = analysis.get("_fetch_login")
             if fetch_login and signal_login:
                 if str(fetch_login).lower() != signal_login:
@@ -207,6 +197,7 @@ class MainMenu(
                     return
             self.current_stream = stream
             self.update_current_stream_view(stream, analysis)
+
     def _auto_play_video(self):
         """Auto-play video if nothing is playing."""
         try:
@@ -224,20 +215,22 @@ class MainMenu(
                     continue
         except Exception as e:
             debug(f"[VIDEO] Auto-play error: {e}")
+
     def _fetch_sg_data(self):
         """Fetch analytics data for the CURRENT channel only."""
         try:
-            # Only fetch for current channel to avoid lag
             if self.current_channel:
                 self.analytics_engine.get_external_data(self.current_channel, platform="twitch")
         except Exception as e:
             debug(f"[SG] Fetch error: {e}")
+
     def _refresh_momsg(self):
         """Refresh MOM and SG widgets every 4 seconds."""
         if hasattr(self, 'current_panel') and self.current_panel:
             self.current_panel.refresh_momsg(self.current_stream, self.current_panel.viewer_analysis)
         # Trigger background fetch for analytics data
         self._fetch_sg_data()
+
     def _refresh_live_channels(self):
         """Periodically refresh the live channels list from Twitch API."""
         if self.is_closing or not self.user:
@@ -255,6 +248,7 @@ class MainMenu(
                 if not in_list:
                     debug(f"[LIVE CHANNELS] Adding current_stream {current_login} to list")
                     self.live_channels.append(self.current_stream)
+
     def _get_recent_channels_for_video(self):
         """Return recent channels for video auto-play from DB."""
         try:
@@ -262,6 +256,7 @@ class MainMenu(
             return get_recent_channels(limit=10)
         except Exception:
             return []
+
     def _load_cached_streamer_data(self):
         """Populate UI panels with locally-cached streamer metadata from DB."""
         try:
@@ -283,6 +278,7 @@ class MainMenu(
             self.log(f"Loaded cached data for {count} streamers from DB")
         except Exception as exc:
             self.log(f"Could not load cached streamer data: {exc}")
+
     def enrich_stream_with_avatar(self, stream):
         if not stream:
             return None
@@ -303,7 +299,6 @@ class MainMenu(
         if cache_key in self.avatar_cache:
             stream_data["avatar_url"] = self.avatar_cache[cache_key]
             return stream_data
-        # Kick and YouTube streams already carry their avatar URL.
         avatar_url = str(
             stream_data.get("avatar_url")
             or ""
@@ -325,14 +320,17 @@ class MainMenu(
             self.avatar_cache[cache_key] = avatar_url
             stream_data["avatar_url"] = avatar_url
         return stream_data
+
     def handle_dispatcher_status(self, message):
         self.dispatcher_panel.set_status(
             message
         )
+
     def handle_dispatcher_log(self, message):
         self.log(
             f"[DISPATCHER] {message}"
         )
+
     def handle_stream_changed(self, data):
         channel = data.get(
             "streamer",
@@ -359,6 +357,7 @@ class MainMenu(
             f"Current stream changed to #{self.current_channel}"
         )
         self.update_next_stream()
+
     def closeEvent(self, event):
         debug(
             "MainMenu.closeEvent invoked"
