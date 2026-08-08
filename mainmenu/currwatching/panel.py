@@ -34,6 +34,7 @@ class CurrentWatchingPanel(QFrame):
         self.image_cache = ImageCache.shared()
         self.viewer_analysis = None
         self._started_at = None
+        self._latest_sully_data = {}
         CurrentWatchingUIBuilder(self)
 
 
@@ -137,7 +138,12 @@ class CurrentWatchingPanel(QFrame):
         # Update SullyGoose widget directly.
         sully = analysis.get("sullygoose", {}) if analysis else {}
         if hasattr(self, 'sully_widget') and self.sully_widget:
-            # Only update widget if we have analytics data, otherwise preserve existing display
+            # Store latest data for future refreshes
+            if sully:
+                self._latest_sully_data = sully
+            # Use stored data if analysis doesn't have it
+            elif self._latest_sully_data:
+                sully = self._latest_sully_data
             if sully:
                 self.sully_widget.update_metrics(sully, analysis)
 
@@ -149,8 +155,8 @@ class CurrentWatchingPanel(QFrame):
         return ""
 
     def _clear_sullygoose(self):
-
         """Reset SullyGoose widget to placeholder state."""
+        self._latest_sully_data = {}
         if hasattr(self, 'sully_widget') and self.sully_widget:
             self.sully_widget.update_metrics(None)
 
