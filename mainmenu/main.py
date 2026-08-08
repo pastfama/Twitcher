@@ -142,10 +142,10 @@ class MainMenu(
         # STRICT guard: only update widget for the current channel
         if not self.current_channel:
             return
-
+        
         if login != self.current_channel:
             return
-
+        
         # Schedule widget update on main thread (thread-safe)
         QMetaObject.invokeMethod(
             self,
@@ -217,10 +217,22 @@ class MainMenu(
             debug(f"[VIDEO] Auto-play error: {e}")
 
     def _fetch_sg_data(self):
-        """Fetch analytics data for the CURRENT channel only."""
+        """Fetch analytics data for the CURRENT channel only.
+        
+        Returns cached data immediately if available, otherwise triggers
+        background fetch. Widget is updated with whatever data is available.
+        """
         try:
-            if self.current_channel:
-                self.analytics_engine.get_external_data(self.current_channel, platform="twitch")
+            if not self.current_channel:
+                return
+            
+            # Get cached data (returns immediately if cached, triggers bg fetch otherwise)
+            data = self.analytics_engine.get_external_data(self.current_channel, platform="twitch")
+            if data and hasattr(self, 'current_panel') and self.current_panel:
+                # Update widget with cached data
+                self.current_panel._latest_sully_data = data
+                self.current_panel.sully_widget.update_metrics(data)
+                debug(f"[MAIN MENU] Updated SullyGoose widget for {self.current_channel} (from cache)")
         except Exception as e:
             debug(f"[SG] Fetch error: {e}")
 
@@ -228,7 +240,7 @@ class MainMenu(
         """Refresh MOM and SG widgets every 4 seconds."""
         if hasattr(self, 'current_panel') and self.current_panel:
             self.current_panel.refresh_momsg(self.current_stream, self.current_panel.viewer_analysis)
-        # Trigger background fetch for analytics data
+        # Trigger cache check for analytics data
         self._fetch_sg_data()
 
     def _refresh_live_channels(self):
@@ -357,6 +369,8 @@ class MainMenu(
             f"Current stream changed to #{self.current_channel}"
         )
         self.update_next_stream()
+        # Trigger immediate fetch of cached SullyGoose data for new channel
+        self._fetch_sg_data()
 
     def closeEvent(self, event):
         debug(
