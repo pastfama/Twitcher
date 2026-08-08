@@ -724,12 +724,16 @@ class AnalyticsEngine:
         
         return min(score, 100)
     
-    def update_stream(self, stream: Dict[str, Any]) -> Dict[str, Any]:
+    def update_stream(self, stream: Dict[str, Any], fetch_external: bool = False) -> Dict[str, Any]:
         """Update analytics for the current stream.
         
         This is the main entry point called by ViewerMonitor and other
-        components. It updates profiles, triggers external data fetches,
-        and returns the current analysis.
+        components. It updates profiles and returns the current analysis.
+        
+        Args:
+            stream: Stream data dict
+            fetch_external: If True, trigger external data fetch. 
+                           Only use for the CURRENT channel to avoid lag.
         """
         if not stream:
             return {}
@@ -747,8 +751,10 @@ class AnalyticsEngine:
         if channel_name and channel_name != "unknown":
             self.update_viewer_count(channel_name, platform, viewer_count)
         
-        # Get external data (triggers background fetch if needed)
-        external = self.get_external_data(channel_name, platform)
+        # Only fetch external data when explicitly requested (current channel only)
+        external = {}
+        if fetch_external:
+            external = self.get_external_data(channel_name, platform) or {}
         
         # Build analysis
         analysis = {
@@ -757,7 +763,7 @@ class AnalyticsEngine:
             "viewers": viewer_count,
             "category": stream.get("game_name", stream.get("game", "Unknown")),
             "title": stream.get("title", ""),
-            "sullygoose": external or {},
+            "sullygoose": external,
         }
         
         # Calculate score

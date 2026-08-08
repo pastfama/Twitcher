@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 from pathlib import Path
+import threading
 from logger import debug
 
 
@@ -135,9 +136,13 @@ class AnalyticsDB:
             db_path = base / "analytics.db"
         
         self.db_path = str(db_path)
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # Enable WAL mode for better concurrent read/write performance
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=10)
         self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._init_schema()
+        self._write_lock = threading.Lock()
     
     def _init_schema(self):
         """Create tables if they don't exist."""
@@ -205,8 +210,9 @@ class AnalyticsDB:
         profile["stale"] = 1 if profile.get("stale", False) else 0
         
         try:
-            with self._conn:
-                self._conn.execute(sql, profile)
+            with self._write_lock:
+                with self._conn:
+                    self._conn.execute(sql, profile)
             return True
         except Exception as e:
             debug(f"[ANALYTICS DB] Error storing profile: {e}")
@@ -274,8 +280,9 @@ class AnalyticsDB:
         """
         now = int(time.time())
         try:
-            with self._conn:
-                self._conn.execute(sql, (login, platform, json.dumps(stats), now, source))
+            with self._write_lock:
+                with self._conn:
+                    self._conn.execute(sql, (login, platform, json.dumps(stats), now, source))
             return True
         except Exception as e:
             debug(f"[ANALYTICS DB] Error storing channel stats: {e}")
@@ -315,8 +322,9 @@ class AnalyticsDB:
         """
         now = int(time.time())
         try:
-            with self._conn:
-                self._conn.execute(sql, (login, platform, viewer_count, now))
+            with self._write_lock:
+                with self._conn:
+                    self._conn.execute(sql, (login, platform, viewer_count, now))
         except Exception as e:
             debug(f"[ANALYTICS DB] Error storing viewer count: {e}")
     
@@ -347,9 +355,10 @@ class AnalyticsDB:
         """
         now = int(time.time())
         try:
-            with self._conn:
-                cursor = self._conn.execute(sql, (user_id, now, json.dumps(metadata or {})))
-                return cursor.lastrowid
+            with self._write_lock:
+                with self._conn:
+                    cursor = self._conn.execute(sql, (user_id, now, json.dumps(metadata or {})))
+                    return cursor.lastrowid
         except Exception as e:
             debug(f"[ANALYTICS DB] Error starting session: {e}")
             return -1
@@ -363,8 +372,9 @@ class AnalyticsDB:
         """
         now = int(time.time())
         try:
-            with self._conn:
-                self._conn.execute(sql, (now, duration_minutes, streams_watched, session_id))
+            with self._write_lock:
+                with self._conn:
+                    self._conn.execute(sql, (now, duration_minutes, streams_watched, session_id))
         except Exception as e:
             debug(f"[ANALYTICS DB] Error ending session: {e}")
     
@@ -393,8 +403,9 @@ class AnalyticsDB:
         """
         now = int(time.time())
         try:
-            with self._conn:
-                self._conn.execute(sql, (endpoint, remaining, reset, now))
+            with self._write_lock:
+                with self._conn:
+                    self._conn.execute(sql, (endpoint, remaining, reset, now))
         except Exception as e:
             debug(f"[ANALYTICS DB] Error updating rate limit: {e}")
     

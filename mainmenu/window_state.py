@@ -27,6 +27,7 @@ class MainMenuWindowState:
         # --- Create all panels ---
         self.current_panel = self.current_panel_cls()
         self.next_panel = self.next_panel_cls()
+        self.next_panel.set_analytics_engine(self.analytics_engine)
         self.live_followed_panel = self.live_followed_panel_cls()
         # Wire the new LiveFollowedPanel signals.
         self.live_followed_panel.channel_selected.connect(self.channel_selected)

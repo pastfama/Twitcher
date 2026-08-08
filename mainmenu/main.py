@@ -80,6 +80,9 @@ class MainMenu(
         self.project_root = PROJECT_ROOT
         self.current_panel_cls = CurrentWatchingPanel
         self.next_panel_cls = NextStreamPanel
+        # Inject analytics engine into next stream panel
+        if hasattr(self, 'next_panel') and self.next_panel:
+            self.next_panel.set_analytics_engine(self.analytics_engine)
         self.live_followed_panel_cls = LiveFollowedPanel
         self.chat_panel_cls = ChatPanel
         self.dispatcher_panel_cls = DispatcherPanel
@@ -139,22 +142,26 @@ class MainMenu(
         """Handle external data ready signal from AnalyticsEngine.
         
         This is called when background fetch completes. Updates the
-        current panel if the data is for the current channel.
+        current panel ONLY if the data is for the current channel.
         """
-        debug(f"[MAIN MENU] External data ready: {login} ({platform})")
+        # STRICT guard: only update widget for the current channel
+        # This prevents multiple simultaneous widget updates that cause freezing
+        if not self.current_channel:
+            return
         
-        # Only process if this is for the current channel
-        if self.current_channel and login != self.current_channel:
-            debug(f"[MAIN MENU] Discarding data for non-current channel '{login}'")
+        if login != self.current_channel:
             return
         
         # Update the current panel's analytics
         if hasattr(self, 'current_panel') and self.current_panel:
-            # Format data for the SullyGoose widget
-            widget_data = self.analytics_engine.get_widget_data(login, "sullygoose")
-            if widget_data:
-                self.current_panel.sully_widget.update_metrics(widget_data)
-                debug(f"[MAIN MENU] Updated SullyGoose widget for {login}")
+            try:
+                # Format data for the SullyGoose widget
+                widget_data = self.analytics_engine.get_widget_data(login, "sullygoose")
+                if widget_data:
+                    self.current_panel.sully_widget.update_metrics(widget_data)
+                    debug(f"[MAIN MENU] Updated SullyGoose widget for {login}")
+            except Exception as e:
+                debug(f"[MAIN MENU] Widget update error: {e}")
     
     def _on_analytics_signal(self, stream, analysis):
         """Handle analytics update from background thread via signal."""
