@@ -741,7 +741,17 @@ class AnalyticsEngine:
             elif rank <= 50:
                 score += 10
         
-        return min(score, 100)
+        # Add score from SullyGoose metrics
+        consistency = sullygoose.get("consistency_score", 0)
+        reliability = sullygoose.get("reliability_score", 0)
+        discovery = sullygoose.get("discovery_score", 0)
+        
+        # Weighted score based on SullyGoose metrics
+        score += (consistency * 0.1)  # 10% of total score
+        score += (reliability * 0.1)  # 10% of total score
+        score += (discovery * 0.1)      # 10% of total score
+        
+        return min(int(score), 100)
     
     def update_stream(self, stream: Dict[str, Any], fetch_external: bool = False) -> Dict[str, Any]:
         """Update analytics for the current stream.
