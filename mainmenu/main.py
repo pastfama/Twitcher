@@ -229,6 +229,16 @@ class MainMenu(
             # Get cached data (returns immediately if cached, triggers bg fetch otherwise)
             data = self.analytics_engine.get_external_data(self.current_channel, platform="twitch")
             if data and hasattr(self, 'current_panel') and self.current_panel:
+                # VERIFY the data belongs to the current channel before displaying
+                data_login = str(
+                    data.get("login")
+                    or data.get("channel")
+                    or data.get("user_login")
+                    or ""
+                ).lower().strip()
+                if data_login and data_login != self.current_channel:
+                    debug(f"[MAIN MENU] Discarding cached data for '{data_login}' (current: '{self.current_channel}')")
+                    return
                 # Update widget with cached data
                 self.current_panel._latest_sully_data = data
                 self.current_panel.sully_widget.update_metrics(data)
