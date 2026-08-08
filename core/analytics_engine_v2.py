@@ -327,21 +327,33 @@ class AnalyticsEngine:
                 return cached.get("data")
             else:
                 # Cache is expired, remove it
-                debug(f"[ANALYTICS] Memory cache expired for {login} ({platform}), checking DB")
+                debug(f"[ANALYTICS] Memory cache expired for {login} ({platform})")
                 del self._external_cache[cache_key]
         
         # Check DB cache
         db_cached = self.db.load_channel_stats(login, platform, max_age_seconds=self._cache_ttl)
         if db_cached:
-            debug(f"[ANALYTICS] Returning DB cached data for {login} ({platform})")
-            self._external_cache[cache_key] = {
-                "data": db_cached,
-                "timestamp": time.time(),
-            }
-            return db_cached
+            # Even if DB has data, check if it's actually fresh enough
+            # If it's close to expiration, trigger a background refresh
+            data_timestamp = db_cached.get("_cached_at", 0)
+            age = time.time() - data_timestamp if data_timestamp else self._cache_ttl + 1
+            
+            if age < self._cache_ttl:
+                debug(f"[ANALYTICS] Returning DB cached data for {login} ({platform})")
+                self._external_cache[cache_key] = {
+                    "data": db_cached,
+                    "timestamp": time.time(),
+                }
+                # Trigger background refresh if data is older than half TTL
+                if age > (self._cache_ttl / 2):
+                    debug(f"[ANALYTICS] Data is {int(age)}s old, triggering background refresh")
+                    self._ensure_async_fetch(login, platform)
+                return db_cached
+            else:
+                debug(f"[ANALYTICS] DB cache expired for {login} ({platform})")
         
         # Trigger background fetch
-        debug(f"[ANALYTICS] No cached data for {login} ({platform}), triggering fetch")
+        debug(f"[ANALYTICS] No valid cached data for {login} ({platform}), triggering fetch")
         self._ensure_async_fetch(login, platform)
         return None
     
