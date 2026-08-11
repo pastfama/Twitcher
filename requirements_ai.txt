@@ -1,0 +1,19 @@
+# Azure AI dependencies for Twitcher
+# Install with: pip install -r requirements_ai.txt
+
+# Core AI dependencies
+openai>=1.0.0
+azure-identity>=1.12.0
+
+# Existing dependencies (from main requirements.txt)
+# PySide6>=6.6.0
+# requests>=2.31.0
+# streamlink>=6.0.0
+# python-dotenv>=1.0.0
+# Pillow>=10.0.0
+# pyyaml>=6.0
+
+# Notes:
+# - Azure AI uses Managed Identity or environment credentials
+# - No API keys needed if running on Azure
+# - For local dev, set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT env vars

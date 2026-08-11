@@ -456,7 +456,7 @@ class MainMenuStreamState:
 
         # Use analytics from viewer monitor if provided; otherwise compute it.
         if analytics is None:
-            analysis = self.analytics_engine.update_stream(
+            analysis = self.analytics_engine.analyze_stream(
                 enriched_stream
             )
         else:
@@ -779,22 +779,21 @@ class MainMenuStreamState:
             channel
         )
 
-
+        # Auto-connect chat when stream starts
+        self.log(f"[CHAT] Auto-connecting chat to #{channel}")
         self.connect_chat(
             channel,
             platform=platform
         )
 
-
         self.dispatcher_panel.set_status(
             f"▶ Watching {channel}"
         )
 
-
+        # Update current stream view (triggers AI analysis)
         self.update_current_stream_view(
             self.current_stream
         )
-
 
         self.update_next_stream()
 

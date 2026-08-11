@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class CurrentWatchingPanel(QFrame):
     """Card displaying the currently-watched stream: avatar, title,
-    viewer count, game, uptime, momentum, and SullyGoose analytics."""
+    viewer count, game, uptime, and momentum."""
 
     #: Dimensions passed to ImageCache (matching Theme).
     AVATAR_SIZE = (Theme.AVATAR_SIZE, Theme.AVATAR_SIZE)
@@ -34,7 +34,6 @@ class CurrentWatchingPanel(QFrame):
         self.image_cache = ImageCache.shared()
         self.viewer_analysis = None
         self._started_at = None
-        self._latest_sully_data = {}
         CurrentWatchingUIBuilder(self)
 
 
@@ -112,7 +111,7 @@ class CurrentWatchingPanel(QFrame):
         self._update_momentum(status, percent, analysis)
 
     def _update_momentum(self, status, percent, analysis):
-        """Update momentum label, gauge, and SullyGoose widget.
+        """Update momentum label and gauge.
 
         Consolidates logic that was duplicated between
         :meth:`set_viewer_status` and :meth:`refresh_momsg` so there
@@ -128,24 +127,18 @@ class CurrentWatchingPanel(QFrame):
         self.momentum_label.setStyleSheet(
             f"color: {color}; font-size: 11px; font-weight: bold;"
         )
-        self.momentum_label.setText(f"{status} {percent:+.1f}%")
+        
+        # Show AI insight if available
+        ai_insight = analysis.get("ai_insight", "") if analysis else ""
+        if ai_insight:
+            self.momentum_label.setText(f"{status} {percent:+.1f}% • {ai_insight}")
+        else:
+            self.momentum_label.setText(f"{status} {percent:+.1f}%")
 
         # Update mini gauge with momentum.
         # The gauge now takes the raw percent directly and clamps it
         # to its +/-50% dial semantics internally.
         self.mini_gauge.set_percent(percent, status)
-
-        # Update SullyGoose widget directly.
-        sully = analysis.get("sullygoose", {}) if analysis else {}
-        if hasattr(self, 'sully_widget') and self.sully_widget:
-            # Store latest data for future refreshes
-            if sully:
-                self._latest_sully_data = sully
-            # Use stored data if analysis doesn't have it
-            elif self._latest_sully_data:
-                sully = self._latest_sully_data
-            if sully:
-                self.sully_widget.update_metrics(sully, analysis)
 
     def _current_channel_name(self):
         """Return the login name of the currently displayed channel, or empty string."""
@@ -153,12 +146,6 @@ class CurrentWatchingPanel(QFrame):
         if text and text.startswith("#"):
             return text[1:].lower().strip()
         return ""
-
-    def _clear_sullygoose(self):
-        """Reset SullyGoose widget to placeholder state."""
-        self._latest_sully_data = {}
-        if hasattr(self, 'sully_widget') and self.sully_widget:
-            self.sully_widget.update_metrics(None)
 
     # ============================================================
     # CLEAR
@@ -170,7 +157,6 @@ class CurrentWatchingPanel(QFrame):
         self.enlarged_lcd_counter.display(0)
         self.title_label.setText("—")
         self.momentum_label.setText("📊 Waiting...")
-        self._clear_sullygoose()
         self.set_avatar_image(None)
         self.live_label.setText("● OFFLINE")
         self.viewer_history_graph.clear()
@@ -249,11 +235,10 @@ class CurrentWatchingPanel(QFrame):
     # ============================================================
 
     def refresh_momsg(self, stream, analysis):
-        """Refresh MOM and SG widgets every 4 seconds via timer.
+        """Refresh MOM widget every 4 seconds via timer.
         
         Updates:
         - MOM gauge (momentum), LCD (viewer count), graph (history)
-        - SG metrics that change frequently
         
         Also persists viewer history to DB.
         """
@@ -290,7 +275,7 @@ class CurrentWatchingPanel(QFrame):
         self._update_time_labels()
         self._update_uptime(self._started_at)
 
-        # Update momentum, gauge, and SG widget via the unified helper
+        # Update momentum and gauge via the unified helper
         # (single code path — Fixes duplicated logic, Issue #5).
         if analysis:
             status = analysis.get("status", "")

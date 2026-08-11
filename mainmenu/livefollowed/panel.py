@@ -1,4 +1,4 @@
-"""Live Followed Channels panel — displays live followed streams."""
+"""Live Followed Channels panel — displays live followed streams with thumbnails."""
 
 import requests
 from logger import debug
@@ -16,6 +16,10 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QComboBox,
+    QGridLayout,
+    QScrollArea,
+    QFrame,
+    QSizePolicy,
 )
 
 from core import run_in_background
@@ -28,6 +32,11 @@ class LiveFollowedPanel(QGroupBox):
     watch_requested = Signal(str)
     watchlist_changed = Signal()
 
+    # Thumbnail dimensions (16:9 aspect ratio)
+    THUMB_WIDTH = 200
+    THUMB_HEIGHT = 112
+    CARD_MIN_WIDTH = 220
+
     def __init__(self, api=None, analytics_engine=None):
         debug("LiveFollowedPanel.__init__ called")
         super().__init__("LIVE FOLLOWED CHANNELS")
@@ -37,9 +46,12 @@ class LiveFollowedPanel(QGroupBox):
         self._tracker = None
         self._analytics = analytics_engine
         self._avatar_cache = {}
+        self._thumb_cache = {}
         self._pending_avatars = set()
+        self._pending_thumbs = set()
         self._row_by_login = {}
         self._all_streams = []
+        self._card_widgets = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -127,31 +139,10 @@ class LiveFollowedPanel(QGroupBox):
         self.search_input.textChanged.connect(self._on_search_changed)
         layout.addWidget(self.search_input)
 
-        # --- Column headers ---
-        headers_row = QHBoxLayout()
-        headers_row.setContentsMargins(52, 0, 6, 0)
-        headers_row.setSpacing(0)
-
-        for text, width in [
-            ("CHANNEL", None),
-            ("VIEWERS", 60),
-            ("CATEGORY", None),
-            ("GROWTH", 55),
-            ("SCORE", 40),
-        ]:
-            lbl = QLabel(text)
-            lbl.setFont(QFont(Theme.FAMILY, 7, QFont.Weight.Bold))
-            lbl.setStyleSheet(f"color: {Theme.GAME_DIM}; padding: 2px 0;")
-            if width:
-                lbl.setFixedWidth(width)
-            headers_row.addWidget(lbl)
-
-        layout.addLayout(headers_row)
-
-        # --- Channel list ---
+        # --- Channel list (thumbnail card style) ---
         self.channel_list = QListWidget()
         self.channel_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        self.channel_list.setSpacing(1)
+        self.channel_list.setSpacing(2)
         self.channel_list.setStyleSheet(f"""
             QListWidget {{
                 background-color: {Theme.DARK_PANEL};
@@ -266,39 +257,82 @@ class LiveFollowedPanel(QGroupBox):
 
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, stream)
-        item.setSizeHint(QSize(0, 52))
+        # Taller rows for thumbnail cards
+        item.setSizeHint(QSize(0, self.THUMB_HEIGHT + 20))
         self.channel_list.addItem(item)
 
-        row = self._build_row_widget(stream, name, viewers, category, login)
-        self.channel_list.setItemWidget(item, row)
+        card = self._build_card_widget(stream, name, viewers, category, login)
+        self.channel_list.setItemWidget(item, card)
 
         if login:
-            self._row_by_login[login] = row
+            self._row_by_login[login] = card
             self._ensure_avatar(login, stream.get("avatar_url"))
+            # Fetch stream thumbnail
+            thumb_url = stream.get("thumbnail_url") or stream.get("thumbnail", "")
+            if thumb_url:
+                self._ensure_thumbnail(login, thumb_url)
 
-    def _build_row_widget(self, stream, name, viewers, category, login):
+    def _build_card_widget(self, stream, name, viewers, category, login):
+        """Build a card-style row with thumbnail on the left and info on the right."""
         widget = QWidget()
         widget.setObjectName("FollowedRow")
-        widget.setStyleSheet("QWidget#FollowedRow { background: transparent; }")
+        widget.setStyleSheet(f"""
+            QWidget#FollowedRow {{
+                background: transparent;
+                border-bottom: 1px solid {Theme.SECTION_BORDER};
+            }}
+            QWidget#FollowedRow:hover {{
+                background-color: rgba(26, 42, 74, 0.3);
+            }}
+        """)
 
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(4, 3, 6, 3)
-        layout.setSpacing(8)
+        layout.setContentsMargins(4, 4, 8, 4)
+        layout.setSpacing(10)
 
-        # --- Avatar ---
+        # --- Thumbnail container (with avatar overlay) ---
+        thumb_container = QWidget()
+        thumb_container.setFixedSize(self.THUMB_WIDTH, self.THUMB_HEIGHT)
+        thumb_layout = QVBoxLayout(thumb_container)
+        thumb_layout.setContentsMargins(0, 0, 0, 0)
+
+        thumb_label = QLabel()
+        thumb_label.setFixedSize(self.THUMB_WIDTH, self.THUMB_HEIGHT)
+        thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        thumb_label.setStyleSheet(f"""
+            background-color: {Theme.DARK_PANEL};
+            border: 1px solid {Theme.SECTION_BORDER};
+            border-radius: 6px;
+            color: {Theme.DIM};
+            font-size: 10px;
+        """)
+        thumb_label.setText("📺")
+        thumb_layout.addWidget(thumb_label)
+
+        # Small avatar overlaid in bottom-left of thumbnail
         avatar_label = QLabel("?")
-        avatar_label.setFixedSize(38, 38)
+        avatar_label.setFixedSize(28, 28)
         avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         avatar_label.setStyleSheet(f"""
             background-color: {Theme.AVATAR_BG};
-            border: 1px solid {Theme.SECTION_BORDER};
-            border-radius: 19px;
+            border: 2px solid {Theme.DARK_PANEL};
+            border-radius: 14px;
             color: {Theme.DIM};
-            font-size: 11px;
+            font-size: 9px;
         """)
-        layout.addWidget(avatar_label)
+        avatar_label.setParent(thumb_container)
+        avatar_label.move(4, self.THUMB_HEIGHT - 32)
 
-        # --- Platform badge ---
+        layout.addWidget(thumb_container)
+
+        # --- Info panel (right side) ---
+        info = QVBoxLayout()
+        info.setSpacing(3)
+
+        # Top row: platform badge + channel name
+        top_row = QHBoxLayout()
+        top_row.setSpacing(6)
+
         platform = stream.get("platform", "twitch")
         badge_colors = {
             "twitch": "#9146FF",
@@ -313,51 +347,35 @@ class LiveFollowedPanel(QGroupBox):
             font-weight: bold;
             border: 1px solid {badge_color};
             border-radius: 3px;
-            padding: 1px 4px;
+            padding: 1px 5px;
         """)
         badge_label.setFixedWidth(52)
-        layout.addWidget(badge_label)
+        top_row.addWidget(badge_label)
 
-        # --- Channel name ---
         name_label = QLabel(str(name))
-        name_label.setFont(QFont(Theme.FAMILY, 11, QFont.Weight.Bold))
+        name_label.setFont(QFont(Theme.FAMILY, 12, QFont.Weight.Bold))
         name_label.setStyleSheet(f"color: {Theme.TEXT_PRIMARY};")
-        name_label.setFixedWidth(100)
-        layout.addWidget(name_label)
+        top_row.addWidget(name_label, 1)
 
-        # --- Viewers ---
-        viewers_label = QLabel(f"{viewers:,}")
-        viewers_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 11px;")
-        viewers_label.setFixedWidth(60)
-        layout.addWidget(viewers_label)
+        info.addLayout(top_row)
 
-        # --- Category ---
-        cat_label = QLabel(category)
+        # Viewers row
+        viewers_label = QLabel(f"👁 {viewers:,} viewers")
+        viewers_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 11px; font-weight: bold;")
+        info.addWidget(viewers_label)
+
+        # Category
+        cat_label = QLabel(f"🎮 {category}")
         cat_label.setStyleSheet(f"color: {Theme.MUTED}; font-size: 10px;")
-        layout.addWidget(cat_label, 1)
+        info.addWidget(cat_label)
 
-        # --- Growth ---
-        growth_parts = []
-        if self._tracker and login:
-            stats = self._tracker.get_channel_stats(
-                login,
-                platform=stream.get("platform", "twitch")
-            )
-            if stats:
-                percent = stats.get("percent") or 0
-                growth_parts.append(f"{percent:+.1f}%")
+        # Bottom row: growth + score
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(8)
 
-        sully = {}
-        platform = stream.get("platform", "twitch")
-        if self._analytics and login:
-            sully = self._analytics.get_external_data(login, platform=platform) or {}
-        if sully:
-            growth = sully.get("viewer_growth", 0)
-            if growth is not None:
-                growth_parts.append(f"{growth:+.1f}%")
-
-        growth_text = growth_parts[0] if growth_parts else "--"
-        growth_label = QLabel(growth_text)
+        # Growth
+        growth_text = self._get_growth_text(login, stream)
+        growth_label = QLabel(f"📈 {growth_text}")
         is_positive = growth_text.startswith("+") and growth_text != "+0.0%"
         is_negative = growth_text.startswith("-")
         if is_positive:
@@ -366,23 +384,107 @@ class LiveFollowedPanel(QGroupBox):
             growth_label.setStyleSheet(f"color: {Theme.RED_DARK}; font-size: 10px; font-weight: bold;")
         else:
             growth_label.setStyleSheet(f"color: {Theme.TEXT_SECONDARY}; font-size: 10px;")
-        growth_label.setFixedWidth(55)
-        layout.addWidget(growth_label)
+        bottom_row.addWidget(growth_label)
 
-        # --- Score ---
-        score_text = "--"
-        if self._analytics and sully:
-            score = self._analytics.calculate_score({"viewers": viewers, "sullygoose": sully})
-            score_text = str(score)
-        score_label = QLabel(score_text)
+        # Score
+        score_text = self._get_score_text(login, stream, viewers)
+        score_label = QLabel(f"⭐ {score_text}")
         score_label.setStyleSheet(f"color: {Theme.CYAN}; font-size: 10px; font-weight: bold;")
-        score_label.setFixedWidth(40)
-        layout.addWidget(score_label)
+        bottom_row.addWidget(score_label)
+
+        bottom_row.addStretch()
+        info.addLayout(bottom_row)
+
+        info.addStretch()
+        layout.addLayout(info, 1)
 
         widget.avatar_label = avatar_label
+        widget.thumb_label = thumb_label
         widget.login = login
         widget.stream = stream
         return widget
+
+    def _get_growth_text(self, login, stream):
+        """Get growth percentage from AI analysis or viewer tracker."""
+        ai_analysis = {}
+        platform = stream.get("platform", "twitch")
+        if self._analytics and login:
+            ai_analysis = self._analytics.get_ai_analysis(login, platform=platform)
+        if ai_analysis:
+            momentum_percent = ai_analysis.get("momentum_percent", 0)
+            return f"{momentum_percent:+.1f}%"
+        if self._tracker:
+            tracker_data = self._tracker.get_channel_stats(login, platform=platform)
+            if tracker_data:
+                pct = tracker_data.get("percent", 0)
+                return f"{pct:+.1f}%"
+        return "--"
+
+    def _get_score_text(self, login, stream, viewers):
+        """Get quality score from AI analysis or estimate from viewers."""
+        ai_analysis = {}
+        platform = stream.get("platform", "twitch")
+        if self._analytics and login:
+            ai_analysis = self._analytics.get_ai_analysis(login, platform=platform)
+        if ai_analysis:
+            return str(ai_analysis.get("quality_score", 0))
+        if viewers >= 10000:
+            return "75"
+        elif viewers >= 1000:
+            return "50"
+        elif viewers >= 100:
+            return "25"
+        return "10"
+
+    # ---- Thumbnail loading ----
+
+    def _ensure_thumbnail(self, login, thumb_url):
+        """Load stream thumbnail asynchronously."""
+        # Replace template URL dimensions with our size
+        url = thumb_url.replace("{width}", str(self.THUMB_WIDTH)).replace("{height}", str(self.THUMB_HEIGHT))
+        if login in self._thumb_cache:
+            self._apply_thumbnail(login, self._thumb_cache[login])
+            return
+        if login in self._pending_thumbs:
+            return
+        self._pending_thumbs.add(login)
+        run_in_background(
+            lambda: self._fetch_thumbnail(login, url),
+            lambda result: self._on_thumbnail_fetched(result),
+            lambda _error: self._pending_thumbs.discard(login),
+        )
+
+    def _fetch_thumbnail(self, login, url):
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            return login, response.content
+        except Exception:
+            return login, None
+
+    def _on_thumbnail_fetched(self, result):
+        login, data = result
+        self._pending_thumbs.discard(login)
+        if not data:
+            return
+        pixmap = QPixmap()
+        if pixmap.loadFromData(data):
+            pixmap = pixmap.scaled(
+                self.THUMB_WIDTH, self.THUMB_HEIGHT,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._thumb_cache[login] = pixmap
+            self._apply_thumbnail(login, pixmap)
+
+    def _apply_thumbnail(self, login, pixmap):
+        card = self._row_by_login.get(login)
+        if card is None:
+            return
+        card.thumb_label.setPixmap(pixmap)
+        card.thumb_label.setText("")
+
+    # ---- Avatar loading ----
 
     def _ensure_avatar(self, login, avatar_url):
         if login in self._avatar_cache:
@@ -420,16 +522,16 @@ class LiveFollowedPanel(QGroupBox):
             return
         pixmap = QPixmap()
         if pixmap.loadFromData(data):
-            pixmap = pixmap.scaled(38, 38, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+            pixmap = pixmap.scaled(28, 28, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
             self._avatar_cache[login] = pixmap
             self._apply_avatar(login, pixmap)
 
     def _apply_avatar(self, login, pixmap):
-        row = self._row_by_login.get(login)
-        if row is None:
+        card = self._row_by_login.get(login)
+        if card is None:
             return
-        row.avatar_label.setPixmap(pixmap)
-        row.avatar_label.setText("")
+        card.avatar_label.setPixmap(pixmap)
+        card.avatar_label.setText("")
 
     def _discard_pending(self, login):
         self._pending_avatars.discard(login)

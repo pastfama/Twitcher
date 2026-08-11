@@ -19,7 +19,6 @@ from .stream_resolver import (
     resolve_stream_url,
     try_resolve as try_resolve_streams,
 )
-from .analytics_engine import AnalyticsEngine
 from .viewer_monitor import ViewerMonitor
 from .viewer_tracker import ViewerTracker
 from .workers import BackgroundTask, TaskSignals, run_in_background, wait_for_pending
@@ -40,7 +39,6 @@ __all__ = [
     "normalize_stream_channel",
     "resolve_stream_url",
     "try_resolve_streams",
-    "AnalyticsEngine",
     "update_streamer",
     "get_streamer",
     "record_viewer_count",

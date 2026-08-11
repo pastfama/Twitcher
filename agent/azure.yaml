@@ -1,0 +1,41 @@
+# Azure Developer CLI (azd) configuration for Twitcher Analytics Agent
+name: twitcher-analytics-agent
+metadata:
+  description: AI-powered agent providing analytics data about Twitch streamers
+
+services:
+  agent:
+    project: .
+    language: python
+    host: appservice
+    agent:
+      type: responses
+      model: gpt-5-mini-1
+      tools:
+        - type: mcp
+          name: streamer-tool
+          url: http://localhost:8000/api/mcp/streamers
+          description: Access streamer data and AI analytics
+        - type: mcp
+          name: analytics-tool
+          url: http://localhost:8000/api/mcp/analytics
+          description: Get viewer trends, quality metrics, and predictions
+        - type: mcp
+          name: viewer-tool
+          url: http://localhost:8000/api/mcp/viewers
+          description: Query viewer history and statistics
+    connections:
+      - name: azure-openai
+        resource: /subscriptions/8cce2fe7-7c75-4969-9da9-707aadd13e52/resourceGroups/1/providers/Microsoft.CognitiveServices/accounts/malovsky99-6011-resource
+        project: /subscriptions/8cce2fe7-7c75-4969-9da9-707aadd13e52/resourceGroups/1/providers/Microsoft.CognitiveServices/accounts/malovsky99-6011-resource/projects/malovsky99-6011
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+env:
+  - AZURE_OPENAI_ENDPOINT=https://malovsky99-6011-resource.services.ai.azure.com/openai/v1
+  - AZURE_OPENAI_DEPLOYMENT=gpt-5-mini-1
+  - TWITCHER_DB_PATH=/home/data/watcher.db
+  - LOG_LEVEL=info

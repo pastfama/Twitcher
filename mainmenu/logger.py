@@ -21,9 +21,6 @@ logging.basicConfig(
 # Global debug flag (set via environment variable WATCHER_DEBUG=1)
 DEBUG_ENABLED = os.getenv('WATCHER_DEBUG', '0').lower() in ('1', 'true', 'yes')
 
-# Log file path
-LOG_FILE = 'watcher.log'
-
 def debug(message):
     """Log debug messages if DEBUG_ENABLED is True."""
     if DEBUG_ENABLED:

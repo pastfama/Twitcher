@@ -1,7 +1,7 @@
 """Live Followed channels list (port of mainmenu/livefollowed/panel.py).
 
 Search bar + table headers (CHANNEL/VIEWERS/CATEGORY/GROWTH/SCORE) +
-letter avatars + SullyGoose score column.
+letter avatars.
 """
 
 import tkinter as tk

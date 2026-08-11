@@ -1,8 +1,7 @@
 """UI construction for the Current Watching panel.
 
-Exact pixel-based split using module constants:
-- Left (red box): MOM widget with gauge, LCD, momentum label, neon indicators
-- Right (green box): SG widget with metrics grid and score bars
+Module constants:
+- MOM widget with gauge, LCD, momentum label, neon indicators
 """
 
 from PySide6.QtCore import Qt, QSize
@@ -19,7 +18,6 @@ import logging
 
 from .theme import Theme
 from widgets.mom import AnalogGauge, GAUGE_SIZE, MOM_WIDTH, LCD_WIDTH, LCD_HEIGHT, GRAPH_HEIGHT
-from widgets.sullygoose import SullyGooseWidget
 from widgets.viewer_graph import ViewerHistoryGraph
 
 logger = logging.getLogger(__name__)
@@ -44,31 +42,15 @@ class CurrentWatchingUIBuilder:
         # Header (avatar + channel + title)
         self._build_header(main_layout)
 
-        # Pixel-based split: MOM (fixed width) | SG (expanding)
-        split = QHBoxLayout()
-        split.setSpacing(4)
-        split.setContentsMargins(0, 0, 0, 0)
+        # MOM widget section
+        mom_container = QWidget()
+        mom_container.setFixedWidth(MOM_WIDTH)
+        mom_layout = QVBoxLayout(mom_container)
+        mom_layout.setContentsMargins(0, 0, 0, 0)
+        mom_layout.setSpacing(4)
+        self._build_mom_section(mom_layout)
 
-        # Left: MOM widget (red box area) - uses MOM_WIDTH constant
-        left_container = QWidget()
-        left_container.setFixedWidth(MOM_WIDTH)
-        left_layout = QVBoxLayout(left_container)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(4)
-        self._build_mom_section(left_layout)
-
-        # Right: SG widget (green box area) - expands to fill remaining space
-        right_container = QWidget()
-        right_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        right_layout = QVBoxLayout(right_container)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(4)
-        self._build_sg_section(right_layout)
-
-        split.addWidget(left_container)
-        split.addWidget(right_container, 1)
-
-        main_layout.addLayout(split, 1)
+        main_layout.addWidget(mom_container)
 
     def _setup_panel(self):
         self.panel.setObjectName("CurrentCard")
@@ -201,11 +183,3 @@ class CurrentWatchingUIBuilder:
         layout.addWidget(self.panel.viewer_history_graph)
 
 
-    def _build_sg_section(self, layout):
-        """SG widget for right side (green box): SullyGoose analytics grid.
-        
-        Uses SullyGooseWidget which has its own size constants defined in
-        widgets.sullygoose module (METRIC_CELL_HEIGHT, SCORE_BAR_WIDTH, etc.)
-        """
-        self.panel.sully_widget = SullyGooseWidget()
-        layout.addWidget(self.panel.sully_widget)

@@ -119,24 +119,15 @@ class ViewerTracker:
 
 
         if percent >= 15:
-
-            status = "🚀 Spike"
-
+            status = "SPIKE"
         elif percent >= 3:
-
-            status = "🟢 Rising"
-
+            status = "RISING"
         elif percent <= -15:
-
-            status = "📉 Drop"
-
+            status = "DROP"
         elif percent <= -3:
-
-            status = "🔴 Falling"
-
+            status = "FALLING"
         else:
-
-            status = "🟡 Stable"
+            status = "STABLE"
 
 
         return {

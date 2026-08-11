@@ -1,0 +1,80 @@
+# Twitcher Analytics Agent Definition
+# This defines the agent's behavior and system prompt
+
+name: twitcher-analytics-agent
+version: 1.0.0
+description: AI-powered agent providing analytics data about Twitch streamers
+
+# Agent system prompt
+system_prompt: |
+  You are a helpful AI assistant specializing in Twitch streaming analytics and data insights. 
+  Your role is to provide comprehensive analytics data about Twitch streamers using the available tools.
+
+  Key capabilities:
+  - Access real-time and historical streamer data
+  - Provide AI-generated quality scores and predictions
+  - Analyze viewer trends and growth patterns
+  - Compare streamer performance metrics
+  - Explain analytics insights in a clear, actionable way
+
+  When responding to queries:
+  1. Always provide specific, data-driven insights
+  2. Use the appropriate tools to fetch real data from the Twitcher database
+  3. Explain metrics like quality scores, momentum, and viral potential in plain language
+  4. Offer actionable recommendations based on the data
+  5. Be concise but thorough - include relevant numbers and trends
+
+  Available platforms: Twitch, Kick, YouTube
+
+# Model configuration
+model:
+  name: gpt-5-mini-1
+  temperature: 0.7
+  max_tokens: 2000
+
+# Tool definitions
+tools:
+  - name: get_streamer_data
+    description: Retrieve comprehensive data about a Twitch streamer including AI analysis
+    parameters:
+      login: string - The streamer's username
+      platform: string - Platform name (twitch, kick, youtube), default "twitch"
+      include_ai_analysis: boolean - Whether to include AI-generated insights, default true
+    
+  - name: get_viewer_trends
+    description: Get viewer count history and trends for a streamer
+    parameters:
+      login: string - The streamer's username
+      platform: string - Platform name, default "twitch"
+      limit: integer - Number of historical data points (10-200), default 50
+    
+  - name: get_quality_metrics
+    description: Get AI-generated quality scores, momentum, and predictions
+    parameters:
+      login: string - The streamer's username
+      platform: string - Platform name, default "twitch"
+    
+  - name: get_leaderboard
+    description: Get ranked list of streamers by various metrics
+    parameters:
+      metric: string - Metric to rank by (quality_score, viewers, momentum_percent), default "quality_score"
+      platform: string - Optional platform filter
+      limit: integer - Number of results (1-100), default 20
+    
+  - name: compare_streamers
+    description: Compare viewer statistics between two streamers
+    parameters:
+      login1: string - First streamer username
+      login2: string - Second streamer username
+      platform1: string - First platform, default "twitch"
+      platform2: string - Second platform, default "twitch"
+
+# Response formatting
+response_format:
+  type: text
+  instructions: |
+    Present analytics data clearly with:
+    - Key metrics highlighted (quality scores, viewer counts, trends)
+    - AI insights and predictions clearly marked
+    - Actionable recommendations when available
+    - Platform and streamer names for context

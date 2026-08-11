@@ -54,11 +54,11 @@ class Theme:
 
 # Sentiment label for the status text.
 STATUS_LABEL = {
-    "🚀 Spike": "SPIKE",
-    "🟢 Rising": "RISING",
-    "📉 Drop": "DROP",
-    "🔴 Falling": "FALLING",
-    "🟡 Stable": "STABLE",
+    "SPIKE": "SPIKE",
+    "RISING": "RISING",
+    "DROP": "DROP",
+    "FALLING": "FALLING",
+    "STABLE": "STABLE",
     "stable": "STABLE",
     "warming up": "WARMING",
 }
@@ -78,11 +78,11 @@ except Exception:  # customtkinter not installed yet
 
 # Status -> color map for the neon indicator and sentiment label.
 STATUS_COLORS = {
-    "\U0001f680 Spike": Theme.GREEN,
-    "\U0001f7e2 Rising": Theme.GREEN,
-    "\U0001f4c9 Drop": Theme.RED,
-    "\U0001f534 Falling": Theme.RED,
-    "\U0001f7e1 Stable": Theme.ORANGE,
+    "SPIKE": Theme.GREEN,
+    "RISING": Theme.GREEN,
+    "DROP": Theme.RED,
+    "FALLING": Theme.RED,
+    "STABLE": Theme.ORANGE,
     "stable": Theme.MUTED,
     "warming up": Theme.MUTED,
 }

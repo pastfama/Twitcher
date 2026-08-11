@@ -1,5 +1,5 @@
 import os
-from PySide6.QtCore import QSettings, Signal, QObject, Qt, QTimer, QMetaObject
+from PySide6.QtCore import QSettings, Signal, QObject, Qt, QTimer
 from PySide6.QtWidgets import QMainWindow
 from logger import debug
 from video import VideoWindow
@@ -12,7 +12,6 @@ from .livefollowed import LiveFollowedPanel
 from .chatpanel import ChatPanel
 from .nextstream import NextStreamPanel
 import core.db as db
-from core.analytics_engine_v2 import AnalyticsEngine
 from .window_state import MainMenuWindowState
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -52,14 +51,14 @@ class MainMenu(
         # Analytics system
         #
         self.viewer_tracker = ViewerTracker()
-        # Initialize new AnalyticsEngine with AnalyticsDB
-        from core.analytics_db import AnalyticsDB
-        analytics_db = AnalyticsDB()
-        self.analytics_engine = AnalyticsEngine(db=analytics_db)
-        # Connect signal for UI updates
-        self.analytics_engine.add_listener(
-            lambda login, platform, data: self._on_external_data_ready(login, platform, data)
-        )
+        # Initialize AI-powered AnalyticsEngine
+        from core.ai_analytics_engine import get_ai_analytics_engine
+        self.analytics_engine = get_ai_analytics_engine()
+        # Connect AI analysis complete signal to UI update
+        if hasattr(self.analytics_engine, 'analysis_complete'):
+            self.analytics_engine.analysis_complete.connect(
+                self._on_ai_analysis_complete, Qt.QueuedConnection
+            )
         #
         # Viewer Monitor (owns its own QTimer)
         #
@@ -113,9 +112,7 @@ class MainMenu(
         self._video_timer.setInterval(500)
         self._video_timer.timeout.connect(self._auto_play_video)
         self._video_timer.start()
-        # NOTE: The old 30-second SG fetch timer was removed.
-        # ViewerMonitor already triggers SullyGoose fetches via analytics_engine.
-        # MOM+SG refresh timer
+        # MOM refresh timer
         self._momsg_timer = QTimer(self)
         self._momsg_timer.setInterval(4000)
         self._momsg_timer.timeout.connect(self._refresh_momsg)
@@ -133,50 +130,111 @@ class MainMenu(
         self._load_cached_streamer_data()
         self.load_twitch()
 
-    def _on_external_data_ready(self, login: str, platform: str, data: dict):
-        """Handle external data ready signal from AnalyticsEngine.
-        
-        Called from background thread. Uses QMetaObject.invokeMethod to
-        safely update widget on main UI thread.
-        """
-        # STRICT guard: only update widget for the current channel
+    def _update_chat_ai_metrics(self):
+        """Update chat panel with cached or fallback AI metrics."""
+        if not hasattr(self, 'chat_panel') or not self.chat_panel:
+            debug("[MAIN MENU] No chat panel available")
+            return
         if not self.current_channel:
+            debug("[MAIN MENU] No current channel")
             return
         
-        # Verify the login matches the current channel
-        if login != self.current_channel:
-            debug(f"[MAIN MENU] Discarding data for '{login}' (current: '{self.current_channel}')")
-            return
+        debug(f"[MAIN MENU] Updating chat metrics for {self.current_channel}")
         
-        # Schedule widget update on main thread (thread-safe)
-        QMetaObject.invokeMethod(
-            self,
-            "_update_widget_safely",
-            Qt.QueuedConnection,
-            Q_ARG(str, login),
-            Q_ARG(object, data),
-        )
+        # Try to get cached analysis from DB
+        try:
+            from core.db import get_streamer
+            streamer = get_streamer(self.current_channel, platform=self.current_stream.get("platform", "twitch"))
+            debug(f"[MAIN MENU] Streamer data found: {streamer is not None}")
+            if streamer:
+                cached_ai = streamer.get("data", {}).get("ai_analysis", {})
+                debug(f"[MAIN MENU] Cached AI data: {bool(cached_ai)}")
+                if cached_ai:
+                    debug(f"[MAIN MENU] Cached AI score: {cached_ai.get('quality_score')}")
+                    # Convert cached format to UI format with derived metrics
+                    score = cached_ai.get("quality_score", 50)
+                    confidence = cached_ai.get("confidence", 0.0)
+                    churn = cached_ai.get("churn_risk", 0.3)
+                    analysis = {
+                        "score": score,
+                        "status": cached_ai.get("momentum", "Stable"),
+                        "percent": cached_ai.get("momentum_percent", 0.0),
+                        "confidence": confidence,
+                        "health": min(100, int(score * 0.7 + confidence * 30)),
+                        "retention": int((1.0 - churn) * 100),
+                        "churn_risk": churn,
+                        "viral_potential": cached_ai.get("viral_potential", 0.0),
+                        "predicted_peak_viewers": cached_ai.get("predicted_peak_viewers", 0),
+                        "ai_insight": cached_ai.get("ai_insight", ""),
+                        "recommendations": cached_ai.get("recommendations", []),
+                    }
+                    self.chat_panel.update_ai_metrics(analysis)
+                    debug(f"[MAIN MENU] Updated chat metrics with cached data for {self.current_channel}")
+                    return
+        except Exception as e:
+            debug(f"[MAIN MENU] Failed to get cached AI data: {e}")
+        
+        # No cached AI data - show fallback metrics based on viewer count
+        current_score = self.chat_panel.metric_cells["SCORE"].text()
+        debug(f"[MAIN MENU] Current SCORE text: '{current_score}'")
+        if current_score in ("...", "LOADING", "N/A"):
+            debug(f"[MAIN MENU] Setting fallback metrics for {self.current_channel}")
+            # Create fallback analysis based on current stream data
+            viewers = self.current_stream.get("viewer_count", 0) if self.current_stream else 0
+            # Use the AI engine's fallback which includes all derived metrics
+            if self.analytics_engine and hasattr(self.analytics_engine, '_fallback_analysis'):
+                fallback_analysis = self.analytics_engine._fallback_analysis(
+                    self.current_stream or {"viewer_count": viewers}
+                )
+            else:
+                fallback_analysis = {
+                    "score": self._viewer_count_to_score(viewers),
+                    "status": "Stable",
+                    "percent": 0.0,
+                    "confidence": 0.3,
+                    "health": min(100, int(self._viewer_count_to_score(viewers) * 0.7 + 9)),
+                    "retention": 70,
+                    "churn_risk": 0.3,
+                    "viral_potential": 0.3,
+                    "predicted_peak_viewers": viewers,
+                    "ai_insight": "AI analysis pending",
+                    "recommendations": [],
+                }
+            self.chat_panel.update_ai_metrics(fallback_analysis)
 
-    def _update_widget_safely(self, login: str, data: dict):
-        """Update widget - guaranteed to run on main Qt thread.
-
-        Called via QMetaObject.invokeMethod with Qt.QueuedConnection,
-        so this always runs on the main UI thread.
+    def _on_ai_analysis_complete(self, login: str, platform: str, analysis: dict):
+        """Handle AI analysis complete signal.
+        
+        Updates UI with fresh AI insights when background analysis finishes.
         """
-        if hasattr(self, 'current_panel') and self.current_panel:
-            try:
-                # Store data in panel for persistence
-                self.current_panel._latest_sully_data = data
-
-                # Update widget immediately
-                self.current_panel.sully_widget.update_metrics(data)
-                debug(f"[MAIN MENU] Updated SullyGoose widget for {login}")
-            except Exception as e:
-                debug(f"[MAIN MENU] Widget update error: {e}")
+        debug(f"[MAIN MENU] AI analysis complete for {login}: score={analysis.get('score')}")
+        debug(f"[MAIN MENU] Current channel: {self.current_channel}, analysis for: {login}")
+        debug(f"[MAIN MENU] Match: {self.current_channel and login == self.current_channel}")
+        
+        # If this is the current channel, update the UI immediately
+        if self.current_channel and login == self.current_channel:
+            debug(f"[MAIN MENU] Updating UI for current channel {login}")
+            # Update current watching panel
+            if hasattr(self, 'current_panel') and self.current_panel:
+                self.current_panel.set_stream(self.current_stream, analysis)
+            
+            # Update chat panel AI metrics
+            if hasattr(self, 'chat_panel') and self.chat_panel:
+                debug(f"[MAIN MENU] Calling chat_panel.update_ai_metrics()")
+                self.chat_panel.update_ai_metrics(analysis)
+                debug(f"[MAIN MENU] Chat metrics updated, SCORE now: {self.chat_panel.metric_cells['SCORE'].text()}")
+            
+            # Update next stream panel if it's showing this channel
+            if hasattr(self, 'next_panel') and self.next_panel:
+                next_channel = getattr(self.next_panel, '_current_channel', None)
+                if next_channel == login:
+                    self.next_panel._update_analytics_ui(analysis)
+        else:
+            debug(f"[MAIN MENU] Analysis for {login} but current channel is {self.current_channel} - skipping")
 
     def _on_analytics_signal(self, stream, analysis):
         """Handle analytics update from background thread via signal."""
-        debug(f"[MAIN MENU] _on_analytics_signal: stream={stream.get('user_login') if stream else None}, has_sullygoose={'sullygoose' in (analysis or {})}")
+        debug(f"[MAIN MENU] _on_analytics_signal: stream={stream.get('user_login') if stream else None}")
         if stream and analysis:
             signal_login = str(
                 stream.get("user_login")
@@ -218,42 +276,12 @@ class MainMenu(
         except Exception as e:
             debug(f"[VIDEO] Auto-play error: {e}")
 
-    def _fetch_sg_data(self):
-        """Fetch analytics data for the CURRENT channel only.
-        
-        Returns cached data immediately if available, otherwise triggers
-        background fetch. Widget is updated with whatever data is available.
-        """
-        try:
-            if not self.current_channel:
-                return
-            
-            # Get cached data (returns immediately if cached, triggers bg fetch otherwise)
-            data = self.analytics_engine.get_external_data(self.current_channel, platform="twitch")
-            if data and hasattr(self, 'current_panel') and self.current_panel:
-                # VERIFY the data belongs to the current channel before displaying
-                data_login = str(
-                    data.get("login")
-                    or data.get("channel")
-                    or data.get("user_login")
-                    or ""
-                ).lower().strip()
-                if data_login and data_login != self.current_channel:
-                    debug(f"[MAIN MENU] Discarding cached data for '{data_login}' (current: '{self.current_channel}')")
-                    return
-                # Update widget with cached data
-                self.current_panel._latest_sully_data = data
-                self.current_panel.sully_widget.update_metrics(data)
-                debug(f"[MAIN MENU] Updated SullyGoose widget for {self.current_channel} (from cache)")
-        except Exception as e:
-            debug(f"[SG] Fetch error: {e}")
-
     def _refresh_momsg(self):
-        """Refresh MOM and SG widgets every 4 seconds."""
+        """Refresh MOM widget every 4 seconds."""
         if hasattr(self, 'current_panel') and self.current_panel:
             self.current_panel.refresh_momsg(self.current_stream, self.current_panel.viewer_analysis)
-        # Trigger cache check for analytics data
-        self._fetch_sg_data()
+        # Update chat metrics with fresh data if AI analysis completed
+        self._update_chat_ai_metrics()
 
     def _refresh_live_channels(self):
         """Periodically refresh the live channels list from Twitch API."""
@@ -272,6 +300,21 @@ class MainMenu(
                 if not in_list:
                     debug(f"[LIVE CHANNELS] Adding current_stream {current_login} to list")
                     self.live_channels.append(self.current_stream)
+
+    def _viewer_count_to_score(self, viewers: int) -> int:
+        """Convert viewer count to a simple quality score (0-100)."""
+        if viewers >= 10000:
+            return 75
+        elif viewers >= 5000:
+            return 65
+        elif viewers >= 1000:
+            return 50
+        elif viewers >= 500:
+            return 40
+        elif viewers >= 100:
+            return 25
+        else:
+            return 10
 
     def _get_recent_channels_for_video(self):
         """Return recent channels for video auto-play from DB."""
@@ -380,9 +423,11 @@ class MainMenu(
         self.log(
             f"Current stream changed to #{self.current_channel}"
         )
+        debug(f"[MAIN MENU] Stream changed to {self.current_channel}, triggering metrics update")
         self.update_next_stream()
-        # Trigger immediate fetch of cached SullyGoose data for new channel
-        self._fetch_sg_data()
+        # Immediately update chat panel AI metrics with cached/fallback data
+        # This is called ONLY on channel switch, not on every refresh cycle
+        self._update_chat_ai_metrics()
 
     def closeEvent(self, event):
         debug(

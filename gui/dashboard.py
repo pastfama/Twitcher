@@ -2,7 +2,7 @@
 
 Mirrors screenshot 2 (PySide6 original):
   top bar  -> WATCHER CONTROL CENTER + CONNECTED + LOGS + RE-AUTH
-  left col -> CurrentWatching + SullyGoose + LiveFollowed (30%)
+  left col -> CurrentWatching + LiveFollowed (30%)
   center   -> Chat (40%)
   right     -> NextStream + Dispatcher (30%)
 
@@ -14,7 +14,6 @@ import customtkinter as ctk
 
 from gui.theme import Theme, font
 from gui.metrics import CurrentWatchingMetricsPanel
-from gui.panels.sullygoose import SullyGoosePanel
 from gui.panels.live_followed import LiveFollowedPanel
 from gui.panels.chat import ChatPanel
 from gui.panels.next_stream import NextStreamPanel
@@ -78,9 +77,6 @@ class DashboardApp(ctk.CTk):
         self.metrics = CurrentWatchingMetricsPanel(self._left)
         self.metrics.pack(fill="x", pady=(0, 10))
 
-        self.sully = SullyGoosePanel(self._left)
-        self.sully.pack(fill="x", pady=(0, 10))
-
         self.live = LiveFollowedPanel(self._left)
         self.live.pack(fill="both", expand=True)
 
@@ -112,7 +108,6 @@ class DashboardApp(ctk.CTk):
                 cur = state.get("current")
                 if cur:
                     self.metrics.set_metrics(*cur)
-                self.sully.update(state.get("sullygoose") or {})
                 self.live.update(state.get("live") or [])
                 self.next.update(state.get("next") or {})
                 self.dispatch.update(state.get("dispatch") or {})

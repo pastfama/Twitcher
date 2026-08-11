@@ -1,8 +1,8 @@
 """Runnable full-dashboard demo with a mock provider.
 
 Simulates all Watcher metrics live: viewer count sentiment, next stream,
-live-followed list, dispatcher log lines, chat messages, SullyGoose
-analytics — every second. No PySide6, no network.
+live-followed list, dispatcher log lines, chat messages — every second.
+No PySide6, no network.
 
 Run:
     python -m gui.demo_dashboard        (from repo root)
@@ -71,19 +71,6 @@ class _DashboardProvider:
                 "score": random.randint(10, 95),
             })
 
-        # --- SullyGoose analytics (wired to AnalyticsEngine) ---
-        sully = {
-            "streamer": self.CHANNEL,
-            "me": self.CHANNEL,
-            "uptime": f"{random.randint(1, 120)}m",
-            "peak": f"{max(h['viewers'] for h in self.history):,}",
-            "avg": f"{int(sum(h['viewers'] for h in self.history)/len(self.history)):,}",
-            "cons": random.uniform(40, 95),
-            "rel": random.uniform(50, 98),
-            "disc": random.uniform(30, 90),
-            "qual": random.uniform(60, 99),
-        }
-
         # --- dispatcher log (append 1 line every 2 ticks) ---
         self._log_lines += 1
         logs = []
@@ -111,7 +98,6 @@ class _DashboardProvider:
             "current": (analysis, history),
             "next": next_state,
             "live": live,
-            "sullygoose": sully,
             "dispatch": dispatch,
             "chat": chat,
             "connection": conn,

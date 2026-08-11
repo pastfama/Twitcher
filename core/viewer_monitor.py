@@ -114,12 +114,28 @@ class ViewerMonitor(QObject):
         if not stream:
             return None
 
-        analytics = None
+        analytics = {}
 
+        # Get real-time momentum from ViewerTracker (always available)
+        viewer_data = None
+        if self.tracker:
+            viewer_data = self.tracker.update_stream(stream)
+
+        # Get AI/SullyGoose analytics
+        ai_data = None
         if self.analytics_engine:
-            analytics = self.analytics_engine.update_stream(stream)
-        elif self.tracker:
-            analytics = self.tracker.update_stream(stream)
+            if hasattr(self.analytics_engine, 'analyze_stream'):
+                ai_data = self.analytics_engine.analyze_stream(stream)
+            elif hasattr(self.analytics_engine, 'update_stream'):
+                ai_data = self.analytics_engine.update_stream(stream)
+
+        # Merge: AI data as base, then overlay real-time viewer data
+        if ai_data:
+            analytics.update(ai_data)
+        if viewer_data:
+            # ViewerTracker provides real-time status/percent/change/current
+            # These override AI defaults with actual live data
+            analytics.update(viewer_data)
 
         return stream, analytics
 

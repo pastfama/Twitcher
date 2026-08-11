@@ -3,11 +3,11 @@ import threading
 
 import requests
 
-from twitch_irc_client import TwitchChatClient
-from chat_utils import load_twitch_token, normalize_token, transliterate_to_russian
-from logger import debug
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QTextCursor, QTextCharFormat, QTextImageFormat
+from PySide6.QtCore import QObject, Signal, Qt
+from PySide6.QtGui import QAction
+
+from logger import debug, info, warning, error
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -15,25 +15,9 @@ from PySide6.QtWidgets import (
     QTextBrowser,
     QLineEdit,
     QPushButton,
+    QLabel,
+    QMenu,
 )
-
-# ============================================================
-#                    CONFIGURATION
-# ============================================================
-
-
-TWITCH_IRC_HOST = (
-    "irc.chat.twitch.tv"
-)
-
-
-TWITCH_IRC_PORT = 6697
-
-
-TWITCH_VALIDATE_URL = (
-    "https://id.twitch.tv/oauth2/validate"
-)
-
 
 # ============================================================
 #                    CHAT WIDGET
@@ -187,18 +171,17 @@ class ChatWidget(
         controls.addWidget(
             self.message_input, 1
         )
-        # Translit toggle button (replaces emoji picker)
-        self._translit_enabled = False
-        self.translit_button = QPushButton("TRANSLIT")
-        self.translit_button.setToolTip("Toggle Latin→Cyrillic transliteration (translit.ru)")
-        self.translit_button.setFixedSize(80, 32)
-        self.translit_button.setStyleSheet(
-            "font-size: 11px; padding: 2px; border: 1px solid #2a3a5a;"
-            "border-radius: 4px; background-color: #0a0d18; color: #c8cce0;"
+        # Emoji picker button
+        self.emoji_button = QPushButton("\U0001f600")
+        self.emoji_button.setToolTip("Insert emoji")
+        self.emoji_button.setFixedSize(32, 32)
+        self.emoji_button.setStyleSheet(
+            "font-size: 18px; padding: 2px; border: 1px solid #2a3a5a;"
+            "border-radius: 4px; background-color: #0a0d18;"
         )
-        self.translit_button.clicked.connect(self._toggle_translit)
+        self.emoji_button.clicked.connect(self._toggle_emoji_picker)
         controls.addWidget(
-            self.translit_button
+            self.emoji_button
         )
         layout.addLayout(
             controls
@@ -339,19 +322,9 @@ class ChatWidget(
             # self.status.setText("🔴 No valid Twitch token")
             return
 
-        # Resolve the username from the OAuth token so we connect
-        # as the real user (not justinfan12345 which is read-only).
-        resolved_username = None
-        try:
-            from chat_utils import get_token_identity
-            resolved_username, _ = get_token_identity(self.access_token)
-        except Exception as exc:
-            debug(f"[CHAT] Could not resolve username from token: {exc}")
-
         self.client = TwitchChatClient(
             access_token=self.access_token,
-            channel=channel,
-            username=resolved_username,
+            channel=channel
         )
 
         self.client.message_received.connect(
@@ -665,10 +638,6 @@ class ChatWidget(
     ):
 
         from PySide6.QtGui import QTextCursor, QTextCharFormat, QTextImageFormat
-
-        if not username:
-
-            username = "unknown"
 
         safe_username = html.escape(
 
@@ -1106,9 +1075,8 @@ class ChatWidget(
         )
 
 
-        if self._translit_enabled:
-            message = transliterate_to_russian(message)
-            self.message_input.setText(message)
+        message = transliterate_to_russian(message)
+        self.message_input.setText(message)
 
 
         if not message:
@@ -1149,7 +1117,7 @@ class ChatWidget(
 
             self.display_message(
 
-                self.client.username or "you",
+                self.client.username,
 
                 self.current_channel,
 
@@ -1175,29 +1143,60 @@ class ChatWidget(
 
 
     # ========================================================
-    #                    TRANSLIT
+    #                    EMOJI PICKER
     # ========================================================
 
-    def _toggle_translit(self):
-        """Toggle Latin→Cyrillic transliteration on/off."""
-        self._translit_enabled = not self._translit_enabled
-        if self._translit_enabled:
-            self.translit_button.setStyleSheet(
-                "font-size: 11px; padding: 2px; border: 1px solid #00ffff;"
-                "border-radius: 4px; background-color: #00ffff; color: #0a0d18;"
-                "font-weight: bold;"
+    def _toggle_emoji_picker(self):
+        """Show or hide the emoji picker popup near the emoji button."""
+        if hasattr(self, '_emoji_popup') and self._emoji_popup is not None:
+            self._emoji_popup.close()
+            self._emoji_popup = None
+            return
+        from PySide6.QtWidgets import QWidget, QGridLayout, QPushButton
+        from PySide6.QtCore import Qt
+        popup = QWidget(self, Qt.Popup)
+        popup.setStyleSheet(
+            "background-color: #1a1e2e; border: 1px solid #3c456b;"
+            "border-radius: 6px; padding: 6px;"
+        )
+        grid = QGridLayout(popup)
+        grid.setSpacing(2)
+        emoji_sets = [
+            list(range(0x1F600, 0x1F64F+1)),
+            list(range(0x1F300, 0x1F5FF+1)),
+            list(range(0x1F680, 0x1F6FF+1)),
+            list(range(0x2600, 0x26FF+1)),
+            list(range(0x2700, 0x27BF+1)),
+        ]
+        all_emoji = []
+        for s in emoji_sets:
+            all_emoji.extend(s)
+        cols = 10
+        for i, code in enumerate(all_emoji[:80]):
+            em = chr(code)
+            btn = QPushButton(em)
+            btn.setFixedSize(32, 32)
+            btn.setStyleSheet(
+                "font-size: 18px; border: none; background: transparent;"
             )
-            self.translit_button.setText("TRANSLIT ON")
-            # Transliterate any existing text
-            cur = self.message_input.text()
-            if cur:
-                self.message_input.setText(transliterate_to_russian(cur))
-        else:
-            self.translit_button.setStyleSheet(
-                "font-size: 11px; padding: 2px; border: 1px solid #2a3a5a;"
-                "border-radius: 4px; background-color: #0a0d18; color: #c8cce0;"
+            btn.clicked.connect(
+                lambda checked=False, e=em: self._insert_emoji(e)
             )
-            self.translit_button.setText("TRANSLIT")
+            grid.addWidget(btn, i // cols, i % cols)
+        self._emoji_popup = popup
+        btn_pos = self.emoji_button.mapToGlobal(
+            self.emoji_button.rect().bottomLeft()
+        )
+        popup.move(btn_pos)
+        popup.show()
+
+    def _insert_emoji(self, emoji):
+        """Insert an emoji character at the cursor position."""
+        self.message_input.insert(emoji)
+        self.message_input.setFocus()
+        if hasattr(self, '_emoji_popup') and self._emoji_popup is not None:
+            self._emoji_popup.close()
+            self._emoji_popup = None
 
     def chat_connected(
         self

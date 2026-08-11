@@ -101,21 +101,6 @@ class CurrentWatchingMetricsPanel(ctk.CTkFrame):
         self.spark = MomentumSparkline(self, width=220, height=55)
         self.spark.pack(**pad)
 
-        # ---- SullyGoose analytics placeholder -------------------------
-        self.sully = ctk.CTkFrame(self, fg_color=Theme.DARK_PANEL,
-                                  corner_radius=10)
-        self.sully.pack(fill="x", **pad)
-        s_top = tk.Frame(self.sully, bg=Theme.DARK_PANEL)
-        s_top.pack(anchor="w")
-        ctk.CTkLabel(self.sully, text="SULLYGOOSE",
-                     text_color=Theme.TEXT_SECONDARY,
-                     font=font(10, "bold")).pack(anchor="w", **pad)
-        self.sully_var = tk.StringVar(value="analytics warming up…")
-        self.sully_label = ctk.CTkLabel(self.sully,
-                                        textvariable=self.sully_var,
-                                        text_color=Theme.MUTED)
-        self.sully_label.pack(anchor="w", **pad)
-
     # ------------------------------------------------------------------ update
     def set_metrics(self, analysis: dict, history=None) -> None:
         """Push a fresh ``ViewerTracker.analyze()`` result + history list."""

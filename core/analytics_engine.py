@@ -188,6 +188,60 @@ class AnalyticsEngine:
 
         analysis["score"] = self.calculate_score(analysis)
 
+        # ------------------------------------------------
+        # Derived metrics for chat panel AI metrics
+        # (always computed, no AI dependency)
+        # ------------------------------------------------
+
+        sully = analysis.get("sullygoose", {}) or {}
+        viewers = analysis.get("viewers", 0)
+        percent = analysis.get("percent", 0) or 0
+
+        # Confidence: based on how much data we have
+        has_sully = bool(sully)
+        has_tracker = analysis.get("current") is not None
+        confidence = 0.3  # base
+        if has_sully:
+            confidence += 0.3
+        if has_tracker:
+            confidence += 0.2
+        if viewers > 100:
+            confidence += 0.1
+        analysis["confidence"] = round(min(confidence, 1.0), 2)
+
+        # Health: combined score of score + confidence
+        health = min(100, int(analysis["score"] * 0.7 + analysis["confidence"] * 30))
+        analysis["health"] = health
+
+        # Retention: inverse of churn risk (based on growth trend)
+        growth = sully.get("viewer_growth") or 0
+        if growth > 10:
+            retention = 90
+        elif growth > 0:
+            retention = 75
+        elif growth > -5:
+            retention = 60
+        else:
+            retention = 40
+        analysis["retention"] = retention
+        analysis["churn_risk"] = round(1.0 - retention / 100.0, 2)
+
+        # Engagement: based on chat activity and viral potential
+        chat_act = sully.get("chat_activity", "Low")
+        if chat_act == "High":
+            engagement = 80
+        elif chat_act == "Medium":
+            engagement = 50
+        else:
+            engagement = 25
+        analysis["viral_potential"] = round(engagement / 100.0, 2)
+
+        # Predicted peak: current viewers * growth factor
+        if percent > 0:
+            analysis["predicted_peak_viewers"] = int(viewers * (1 + percent / 100))
+        else:
+            analysis["predicted_peak_viewers"] = viewers
+
         with self._stream_lock:
             self.last_analysis = analysis
 
@@ -224,37 +278,50 @@ class AnalyticsEngine:
         return {"sullygoose": sully}
 
     def get_external_data(self, login, platform="twitch"):
-        """Return external data for *login* from the appropriate source.
+        """Return external data for *login* from the cache.
         
-        This is the agnostic interface that will be implemented with
-        platform-specific data fetchers.
+        If not cached, triggers a background fetch.
         """
-        # Placeholder for future implementation
+        fetch_key = f"{platform}:{login}"
+        
+        # Check cache first
+        with self._cache_lock:
+            cached = self._sully_cache.get(fetch_key)
+        
+        if cached:
+            return cached
+        
+        # Not cached — trigger async fetch for next tick
+        self._ensure_async_fetch(login, platform=platform)
+        
+        # Also check the database as a fallback
+        try:
+            from core.db import get_sg
+            db_data = get_sg(login, platform=platform)
+            if db_data:
+                with self._cache_lock:
+                    self._sully_cache[fetch_key] = db_data
+                return db_data
+        except Exception:
+            pass
+        
         return None
         
     def _fetch_data_for_platform(self, login, platform):
-        """Fetch data for a specific platform (to be implemented per platform)."""
-        # For testing purposes, return mock data for Twitch
-        if platform == "twitch":
-            return {
-                "login": login,
-                "avg_viewers": 1234,
-                "peak_viewers": 5678,
-                "viewer_growth": 15.5,
-                "category_rank": 42,
-                "stream_frequency": 2.5,
-                "avg_stream_duration": 3.5,
-                "games_played_30d": 7,
-                "main_game_pct": 35.5,
-                "follower_count": 12345,
-                "follower_growth_30d": 2.5,
-                "chat_activity": "High",
-                "consistency_score": 75,
-                "reliability_score": 85,
-                "discovery_score": 65,
-            }
-        # This will be overridden by platform-specific implementations
-        return None
+        """Fetch data from SullyGoose API for a specific platform."""
+        if platform == "kick":
+            return None  # SullyGoose doesn't support Kick
+        
+        if not self.sullygoose_api:
+            debug(f"[ANALYTICS] No sullygoose_api configured for '{login}'")
+            return None
+        
+        try:
+            stats = self.sullygoose_api.get_channel_stats(login, platform=platform)
+            return stats
+        except Exception as exc:
+            debug(f"[ANALYTICS] SullyGoose fetch failed for '{login}': {exc}")
+            return None
 
     def _ensure_async_fetch(self, login, platform="twitch"):
         """Start a daemon thread to fetch *login* stats if not already in-flight."""
@@ -373,9 +440,9 @@ class AnalyticsEngine:
 
         momentum = analysis.get("status", "")
 
-        if "Spike" in momentum:
+        if momentum in ("SPIKE", "Spike"):
             score += 20
-        elif "Rising" in momentum:
+        elif momentum in ("RISING", "Rising"):
             score += 10
 
         # SullyGoose Intelligence boost

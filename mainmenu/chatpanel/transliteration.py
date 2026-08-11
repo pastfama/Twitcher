@@ -3,6 +3,9 @@
 Converts Latin-script messages (e.g. "privet") into Cyrillic
 ("привет") so Russian-speaking users can type in Latin and have
 their messages appear in Cyrillic.
+
+Mapping matches translit.ru "Основной" (Basic) standard exactly.
+Reference: https://translit.ru
 """
 
 
@@ -16,25 +19,21 @@ def match_case(source: str, replacement: str) -> str:
 
 
 def transliterate_to_russian(text: str) -> str:
-    """Transliterate Latin text to Cyrillic.
-
-    Handles common digraphs (shch→щ, yo→ё, yu→ю, ya→я, zh→ж,
-    kh→х, ts→ц, ch→ч, sh→ш, ye→е) and single-letter mappings.
-    """
+    """Transliterate Latin text to Cyrillic using translit.ru standard."""
     if not text:
         return ""
 
+    # Mapping: latin chunk -> cyrillic. Order matters (longest first).
     combos = [
         ("shch", "щ"),
-        ("yo", "ё"),
-        ("yu", "ю"),
-        ("ya", "я"),
         ("zh", "ж"),
-        ("kh", "х"),
-        ("ts", "ц"),
         ("ch", "ч"),
         ("sh", "ш"),
-        ("ye", "е"),
+        ("yu", "ю"),
+        ("ya", "я"),
+        ("yo", "ё"),
+        ("jj", "й"),
+        ("je", "э"),
     ]
 
     letters = {
@@ -59,14 +58,15 @@ def transliterate_to_russian(text: str) -> str:
         "u": "у",
         "f": "ф",
         "h": "х",
+        "x": "х",
         "c": "ц",
-        "y": "ы",
-        "q": "к",
         "w": "в",
-        "x": "кс",
-        '"': "ь",
+        "q": "я",
+        "y": "ы",
         "'": "ь",
-        "`": "ъ",
+        "ä": "э",
+        "ü": "ю",
+        "ö": "ё",
     }
 
     result = ""

@@ -1,11 +1,14 @@
 """Latin→Cyrillic transliteration for Twitch chat.
 
-Maps common Latin-letter chat spellings to Cyrillic in real time as the
-user types (keystroke-by-keystroke), matching the behaviour of the
-original Qt TRANSLIT button.
+Maps Latin-letter chat spellings to Cyrillic in real time as the
+user types (keystroke-by-keystroke), matching the translit.ru
+"Основной" (Basic) standard.
+
+Reference: https://translit.ru — Основной (default) layout.
 """
 
 # Mapping: latin chunk -> cyrillic. Order matters (longest first).
+# Matches translit.ru "Основной" standard exactly.
 _MAP = [
     ("shch", "щ"),
     ("zh", "ж"),
@@ -14,8 +17,8 @@ _MAP = [
     ("yu", "ю"),
     ("ya", "я"),
     ("yo", "ё"),
+    ("jj", "й"),
     ("je", "э"),
-    ("ii", "й"),
     ("a", "а"),
     ("b", "б"),
     ("v", "в"),
@@ -37,15 +40,20 @@ _MAP = [
     ("u", "у"),
     ("f", "ф"),
     ("h", "х"),
+    ("x", "х"),
     ("c", "ц"),
     ("w", "в"),
-    ("x", "кс"),
+    ("q", "я"),
     ("y", "ы"),
     ("'", "ь"),
+    ("ä", "э"),
+    ("ü", "ю"),
+    ("ö", "ё"),
 ]
 
 
 def translit(text: str) -> str:
+    """Convert Latin transliteration to Cyrillic text."""
     out = text.lower()
     for latin, cyr in _MAP:
         if not latin:
@@ -60,4 +68,3 @@ def on_key_insert(current: str, inserted: str, index: int) -> str:
     """
     new = current[:index] + inserted + current[index:]
     return translit(new)
-

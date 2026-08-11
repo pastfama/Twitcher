@@ -183,7 +183,7 @@ class NextStreamPanel(QFrame):
         self._fetch_analytics()
 
     def _fetch_analytics(self):
-        """Fetch analytics data for the current next stream."""
+        """Fetch AI analytics data for the current next stream."""
         if not self._analytics or not self._current_channel:
             return
 
@@ -191,64 +191,63 @@ class NextStreamPanel(QFrame):
         if self._current_stream:
             platform = self._current_stream.get("platform", "twitch")
 
-        # Get external analytics data
-        data = self._analytics.get_external_data(self._current_channel, platform)
-        if data:
-            self._update_analytics_ui(data)
+        # Get AI analysis data from DB
+        ai_data = self._analytics.get_ai_analysis(self._current_channel, platform)
+        if ai_data:
+            self._update_analytics_ui(ai_data)
         else:
-            self.next_reason_label.setText("Analytics loading...")
-
-    def _update_analytics_ui(self, data):
-        """Update UI with analytics metrics."""
-        # Growth
-        growth = data.get("viewer_growth", 0)
-        if growth is not None:
-            growth_text = f"{growth:+.1f}%"
-            self.next_growth_label.setText(growth_text)
-            if growth > 0:
-                self.next_growth_label.setStyleSheet(
-                    f"color: {Theme.GREEN}; font-size: 11px; font-weight: bold;"
-                )
-            elif growth < 0:
-                self.next_growth_label.setStyleSheet(
-                    f"color: {Theme.RED_DARK}; font-size: 11px; font-weight: bold;"
-                )
-            else:
-                self.next_growth_label.setStyleSheet(
-                    f"color: {Theme.TEXT_SECONDARY}; font-size: 11px; font-weight: bold;"
-                )
-
-        # Score
-        score = data.get("score")
-        if score is None and self._analytics:
-            # Calculate score from viewers + data
+            # No AI data — show basic info from viewer count
             viewers = 0
             if self._current_stream:
                 viewers = int(self._current_stream.get("viewer_count", 0))
-            score = self._analytics.calculate_score({
-                "viewers": viewers,
-                "sullygoose": data,
-            })
-        if score is not None:
+            # Calculate simple score
+            if viewers >= 10000:
+                score = 75
+            elif viewers >= 1000:
+                score = 50
+            elif viewers >= 100:
+                score = 25
+            else:
+                score = 10
+            self.next_score_label.setText(f"Score: {score}")
+            self.next_growth_label.setText("--")
+            self.next_reason_label.setText(
+                f"{viewers:,} viewers" if viewers else "No analytics data"
+            )
+
+    def _update_analytics_ui(self, ai_data):
+        """Update UI with AI analytics metrics."""
+        # Growth (momentum)
+        momentum_percent = ai_data.get("momentum_percent", 0)
+        growth_text = f"{momentum_percent:+.1f}%"
+        self.next_growth_label.setText(growth_text)
+        if momentum_percent > 0:
+            self.next_growth_label.setStyleSheet(
+                f"color: {Theme.GREEN}; font-size: 11px; font-weight: bold;"
+            )
+        elif momentum_percent < 0:
+            self.next_growth_label.setStyleSheet(
+                f"color: {Theme.RED_DARK}; font-size: 11px; font-weight: bold;"
+            )
+        else:
+            self.next_growth_label.setStyleSheet(
+                f"color: {Theme.TEXT_SECONDARY}; font-size: 11px; font-weight: bold;"
+            )
+
+        # Score
+        score = ai_data.get("quality_score", 0)
+        if score:
             self.next_score_label.setText(f"Score: {score}")
 
-        # Reason based on analytics
-        reliability = data.get("reliability_score", 0)
-        discovery = data.get("discovery_score", 0)
-        chat_activity = data.get("chat_activity", "Unknown")
-
-        reason_parts = []
-        if reliability >= 80:
-            reason_parts.append("Reliable schedule")
-        if discovery >= 70:
-            reason_parts.append("Growing audience")
-        if chat_activity == "High":
-            reason_parts.append("Active chat")
-
-        if reason_parts:
-            self.next_reason_label.setText(" • ".join(reason_parts))
+        # Reason based on AI insights
+        recommendations = ai_data.get("recommendations", [])
+        if recommendations:
+            # Show first recommendation as reason
+            self.next_reason_label.setText(recommendations[0])
+        elif ai_data.get("ai_insight"):
+            self.next_reason_label.setText(ai_data.get("ai_insight"))
         else:
-            self.next_reason_label.setText(" analytics available")
+            self.next_reason_label.setText("AI analysis available")
 
     def clear(self):
         self._current_channel = None
