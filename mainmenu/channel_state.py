@@ -369,9 +369,15 @@ class MainMenuStreamState:
         self.next_stream = candidates[0]
 
 
-        self.next_panel.set_stream(
-            self.next_stream
-        )
+        # Only call set_stream on panels that support it (not CommentatorPanel
+        # which tracks the current stream via update_commentary)
+        if hasattr(self.next_panel, 'update_commentary'):
+            # CommentatorPanel — it tracks the current stream, not the next one
+            pass
+        else:
+            self.next_panel.set_stream(
+                self.next_stream
+            )
 
 
         channel = self.next_stream.get(

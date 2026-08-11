@@ -460,6 +460,316 @@ Generate a detailed profile in the exact JSON format specified."""
             "recommendations": [],
         }
     
+    # ── 36-Metric Dashboard Analysis ─────────────────────────────────────
+
+    def analyze_dashboard_metrics(
+        self,
+        stream: Dict[str, Any],
+        viewer_history: Optional[List[Dict]] = None,
+        chat_metrics: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Compute all 36 dashboard metrics from stream data + local metrics.
+
+        Args:
+            stream: Current stream data dict from API
+            viewer_history: Recent viewer history samples from DB
+            chat_metrics: Locally-tracked chat metrics from ViewerMonitor
+                Expected keys: chat_rate, chat_density, emote_ratio,
+                avg_msg_length, new_chatters, unique_chatters
+
+        Returns:
+            Dict with all 36 metric values keyed by short labels.
+        """
+        viewers = int(stream.get("viewer_count", 0))
+        started_at = stream.get("started_at", "")
+        game_name = stream.get("game_name", stream.get("game", "Unknown"))
+        title = stream.get("title", "")
+
+        # Viewer history stats
+        vh = viewer_history or []
+        vh_counts = [h.get("viewers", 0) for h in vh]
+
+        session_peak = max(vh_counts) if vh_counts else viewers
+        session_avg = int(sum(vh_counts) / len(vh_counts)) if vh_counts else viewers
+
+        # Viewer velocity: avg change per sample over last 10 samples
+        velocity = 0.0
+        if len(vh_counts) >= 2:
+            recent = vh_counts[:10]
+            deltas = [recent[i] - recent[i + 1] for i in range(len(recent) - 1)]
+            velocity = sum(deltas) / len(deltas) if deltas else 0.0
+
+        # Viewer volatility: normalized std-dev (0-100)
+        volatility = 0.0
+        if len(vh_counts) >= 3:
+            mean_v = sum(vh_counts) / len(vh_counts)
+            variance = sum((v - mean_v) ** 2 for v in vh_counts) / len(vh_counts)
+            stddev = variance ** 0.5
+            volatility = min(100.0, (stddev / max(mean_v, 1)) * 100)
+
+        # Unique viewer estimate (rough: based on churn rate)
+        churn_risk_est = 0.3
+        if vh_counts and len(vh_counts) >= 5:
+            # Count distinct viewer levels as proxy for turnover
+            distinct = len(set(vh_counts))
+            churn_risk_est = min(0.8, distinct / max(len(vh_counts), 1))
+        unique_est = int(viewers * (1.0 + churn_risk_est * 0.5))
+
+        # Chat metrics (from local tracking or defaults)
+        cm = chat_metrics or {}
+        chat_rate = cm.get("chat_rate", 0.0)
+        chat_density = cm.get("chat_density", 0.0)
+        emote_ratio = cm.get("emote_ratio", 0.0)
+        avg_msg_len = cm.get("avg_msg_length", 0.0)
+        new_chatters = cm.get("new_chatters", 0)
+
+        # Sentiment (from AI or neutral default)
+        sentiment = cm.get("sentiment", 0.0)
+
+        # Stream duration
+        duration_str = "0h 0m"
+        duration_minutes = 0
+        if started_at:
+            try:
+                from datetime import datetime, timezone
+                # Handle various ISO formats
+                sa = started_at.replace("Z", "+00:00")
+                start_dt = datetime.fromisoformat(sa)
+                now = datetime.now(timezone.utc)
+                delta = now - start_dt
+                duration_minutes = int(delta.total_seconds() / 60)
+                hours = duration_minutes // 60
+                mins = duration_minutes % 60
+                duration_str = f"{hours}h {mins}m"
+            except Exception:
+                pass
+
+        # Game changes (tracked in viewer history metadata)
+        game_changes = cm.get("game_changes", 0)
+
+        # Title score (AI-computed or heuristic)
+        title_score = self._heuristic_title_score(title)
+
+        # Tag coverage (AI-computed or heuristic)
+        tag_score = self._heuristic_tag_score(title, game_name)
+
+        # Content freshness (minutes since last metadata change)
+        freshness = cm.get("freshness_minutes", duration_minutes)
+
+        # Growth metrics
+        follow_rate = cm.get("follow_rate", 0.0)
+        growth_trajectory = viewers  # fallback
+        if len(vh_counts) >= 5:
+            # Linear projection: fit trend to last N points
+            n = min(len(vh_counts), 20)
+            recent_counts = list(reversed(vh_counts[:n]))
+            if n >= 2:
+                x_mean = (n - 1) / 2.0
+                y_mean = sum(recent_counts) / n
+                num = sum((i - x_mean) * (v - y_mean) for i, v in enumerate(recent_counts))
+                den = sum((i - x_mean) ** 2 for i in range(n))
+                slope = num / den if den != 0 else 0
+                # Project 1 hour forward (samples every ~4s → 900 samples/hr)
+                growth_trajectory = max(0, int(viewers + slope * 900))
+
+        loyalty = cm.get("audience_loyalty", max(30, min(95, 100 - int(volatility))))
+        discovery = self._compute_discovery(viewers, title_score, tag_score)
+        raid_potential = cm.get("raid_potential", max(10, min(80, int(viewers / 100))))
+        network_effect = cm.get("network_effect", 50)
+
+        # Performance metrics
+        bounce_rate = self._compute_bounce_rate(velocity, viewers, volatility)
+        session_depth = cm.get("session_depth", max(5, min(120, duration_minutes // max(1, len(vh_counts) or 1))))
+        peak_efficiency = 0.0
+        if duration_minutes > 0:
+            peak_efficiency = round((viewers / (duration_minutes / 60.0)), 1) if duration_minutes >= 5 else 0.0
+        consistency = cm.get("consistency_score", 60)
+        uptime_score = cm.get("uptime_score", 95)
+        stream_health = min(100, int(
+            (100 - bounce_rate) * 0.3 +
+            uptime_score * 0.3 +
+            (100 - volatility) * 0.2 +
+            loyalty * 0.2
+        ))
+
+        # AI Insights
+        competitive = self._compute_competitive_index(viewers, session_avg)
+        audience_match = cm.get("audience_match", 65)
+        optimal_remaining = self._compute_optimal_remaining(duration_minutes, velocity, viewers)
+        best_category = cm.get("best_category", game_name)
+        monetization = self._compute_monetization_score(loyalty, viewers, chat_rate, sentiment)
+        overall_rank = self._compute_rank(
+            viewers, velocity, sentiment, loyalty, bounce_rate,
+            stream_health, title_score, discovery
+        )
+
+        return {
+            # Viewer Dynamics
+            "viewers": viewers,
+            "session_peak": session_peak,
+            "session_avg": session_avg,
+            "velocity": round(velocity, 1),
+            "volatility": round(volatility, 1),
+            "unique_est": unique_est,
+            # Engagement
+            "chat_rate": round(chat_rate, 1),
+            "chat_density": round(chat_density, 1),
+            "emote_ratio": round(emote_ratio, 1),
+            "sentiment": round(sentiment, 1),
+            "avg_msg_len": round(avg_msg_len, 1),
+            "new_chatters": new_chatters,
+            # Content
+            "cat_rank": max(1, int(viewers / max(1, viewers // 50 + 1))),
+            "duration": duration_str,
+            "duration_minutes": duration_minutes,
+            "game_changes": game_changes,
+            "title_score": title_score,
+            "tag_score": tag_score,
+            "freshness": freshness,
+            # Growth
+            "follow_rate": round(follow_rate, 1),
+            "growth_trajectory": growth_trajectory,
+            "loyalty": loyalty,
+            "discovery": discovery,
+            "raid_potential": raid_potential,
+            "network_effect": network_effect,
+            # Performance
+            "bounce_rate": bounce_rate,
+            "session_depth": session_depth,
+            "peak_efficiency": peak_efficiency,
+            "consistency": consistency,
+            "uptime_score": uptime_score,
+            "stream_health": stream_health,
+            # AI Insights
+            "competitive_index": competitive,
+            "audience_match": audience_match,
+            "optimal_remaining": optimal_remaining,
+            "best_category": best_category,
+            "monetization": monetization,
+            "overall_rank": overall_rank,
+            # Metadata
+            "sentiment_raw": sentiment,
+        }
+
+    # ── Helper computations for dashboard metrics ───────────────────────
+
+    def _heuristic_title_score(self, title: str) -> int:
+        """Quick heuristic score for a stream title (0-100)."""
+        if not title:
+            return 10
+        score = 40
+        length = len(title)
+        if 20 <= length <= 80:
+            score += 15
+        if any(c in title for c in "!?🔥💀🎉🎊"):
+            score += 10
+        # Has caps words (excitement)
+        words = title.split()
+        caps = sum(1 for w in words if w.isupper() and len(w) > 1)
+        if caps > 0:
+            score += min(15, caps * 5)
+        # Has hashtags or mentions
+        if "#" in title:
+            score += 5
+        # Length penalty for very short/long
+        if length < 5:
+            score -= 20
+        if length > 120:
+            score -= 10
+        return max(5, min(100, score))
+
+    def _heuristic_tag_score(self, title: str, game: str) -> int:
+        """Quick heuristic for tag-content alignment."""
+        if not title or not game:
+            return 30
+        title_lower = title.lower()
+        game_lower = game.lower()
+        # Check if game name appears in title
+        if game_lower in title_lower:
+            return 80
+        # Check for common genre words
+        genre_words = ["fps", "moba", "rpg", "mmo", "horror", "speedrun",
+                       "challenge", "ranked", "competitive", "casual", "variety"]
+        matches = sum(1 for w in genre_words if w in title_lower)
+        return max(30, min(100, 40 + matches * 10))
+
+    def _compute_discovery(self, viewers: int, title_score: int, tag_score: int) -> int:
+        """How discoverable the stream is."""
+        # Higher viewers + better title + better tags = more discoverable
+        viewer_component = min(40, int(viewers / 250))
+        return max(5, min(100, viewer_component + title_score * 0.3 + tag_score * 0.3))
+
+    def _compute_bounce_rate(self, velocity: float, viewers: int, volatility: float) -> int:
+        """Estimate bounce rate from viewer velocity and volatility."""
+        if viewers < 10:
+            return 50
+        # Negative velocity (losing viewers) = higher bounce
+        vel_factor = max(0, min(40, int(-velocity / 10)))
+        vol_factor = max(0, int(volatility * 0.3))
+        base = 20
+        return max(5, min(95, base + vel_factor + vol_factor))
+
+    def _compute_competitive_index(self, viewers: int, avg: int) -> int:
+        """How the stream compares to its own average."""
+        if avg <= 0:
+            return 50
+        ratio = viewers / avg
+        return max(5, min(100, int(ratio * 50)))
+
+    def _compute_optimal_remaining(self, duration_min: int, velocity: float,
+                                    viewers: int) -> str:
+        """AI-suggested remaining stream time."""
+        if duration_min < 30:
+            return "2h+"
+        if velocity > 10 and viewers > 500:
+            return "1-2h"
+        if velocity > 0:
+            return "1h"
+        if velocity < -5:
+            return "30m"
+        if duration_min > 240:  # 4+ hours
+            return "30m"
+        return "1h"
+
+    def _compute_monetization_score(self, loyalty: int, viewers: int,
+                                     chat_rate: float, sentiment: float) -> int:
+        """Revenue potential index."""
+        viewer_factor = min(40, int(viewers / 250))
+        loyalty_factor = int(loyalty * 0.3)
+        chat_factor = min(15, int(chat_rate * 3))
+        sentiment_factor = max(0, int((sentiment + 100) / 200 * 15))
+        return max(5, min(100, viewer_factor + loyalty_factor + chat_factor + sentiment_factor))
+
+    def _compute_rank(self, viewers, velocity, sentiment, loyalty,
+                       bounce, health, title, discovery) -> str:
+        """Compute overall letter grade."""
+        score = (
+            min(25, viewers / 400) +
+            min(15, max(0, velocity / 5 + 7.5)) +
+            min(15, (sentiment + 100) / 200 * 15) +
+            loyalty * 0.15 +
+            (100 - bounce) * 0.1 +
+            health * 0.1 +
+            title * 0.05 +
+            discovery * 0.05
+        )
+        if score >= 90:
+            return "A+"
+        elif score >= 80:
+            return "A"
+        elif score >= 70:
+            return "B+"
+        elif score >= 60:
+            return "B"
+        elif score >= 50:
+            return "C+"
+        elif score >= 40:
+            return "C"
+        elif score >= 30:
+            return "D"
+        else:
+            return "F"
+
     def get_external_data(self, login, platform="twitch"):
         """Return SullyGoose data from database cache."""
         try:

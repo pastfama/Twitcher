@@ -1,4 +1,8 @@
-"""Chat Panel — integrates Twitch chat into the main interface."""
+"""Chat Panel — integrates Twitch chat into the main interface.
+
+Now features a 36-metric AI dashboard with mood-reactive theming
+instead of the old 10-cell metric row.
+"""
 
 from logger import debug
 from PySide6.QtCore import Qt
@@ -9,6 +13,8 @@ from PySide6.QtWidgets import (
 from chat import ChatWidget, TwitchChatClient
 from PySide6.QtCore import QTimer
 from ..theme import Theme
+from .dashboard import MetricsDashboard
+from .mood_engine import MoodEngine
 
 
 class ChatPanel(QGroupBox):
@@ -107,45 +113,12 @@ class ChatPanel(QGroupBox):
         # Hide the redundant internal widgets — the panel header replaces them.
         self._hide_redundant_widgets()
 
-        # --- AI Metrics Widget (10 cells with descriptive labels) ---
-        self.ai_metrics_widget = QWidget()
-        self.ai_metrics_widget.setFixedHeight(110)
-        metrics_layout = QHBoxLayout(self.ai_metrics_widget)
-        metrics_layout.setContentsMargins(4, 4, 4, 4)
-        metrics_layout.setSpacing(4)
-        
-        # Create 10 metric cells with descriptive labels and tooltips
-        self.metric_cells = {}
-        metric_defs = [
-            ("SCORE", "Stream quality rating (0-100)"),
-            ("MOMENTUM", "Viewer trend direction"),
-            ("CONFIDENCE", "AI prediction confidence"),
-            ("PEAK", "Predicted peak viewers"),
-            ("GROWTH", "Viewer growth rate (%)"),
-            ("CHAT ACTIVITY", "Chat engagement level"),
-            ("RETENTION", "Viewer retention rate"),
-            ("HEALTH", "Overall stream health score"),
-            ("ENGAGE", "Engagement potential"),
-            ("ACTION", "AI recommended action"),
-        ]
-        
-        for name, tip in metric_defs:
-            cell = QLabel("...")
-            cell.setFixedSize(90, 40)
-            cell.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            cell.setStyleSheet(f"""
-                background-color: {Theme.DARK_PANEL};
-                color: {Theme.MUTED};
-                border: 1px solid {Theme.SECTION_BORDER};
-                border-radius: 4px;
-                font-size: 10px;
-                font-weight: bold;
-            """)
-            cell.setToolTip(tip)
-            metrics_layout.addWidget(cell)
-            self.metric_cells[name] = cell
-        
-        layout.addWidget(self.ai_metrics_widget)
+        # --- AI Metrics Dashboard (36 metrics, mood-reactive) ---
+        self.mood_engine = MoodEngine(parent=self)
+        self.dashboard = MetricsDashboard(
+            mood_engine=self.mood_engine, parent=self
+        )
+        layout.addWidget(self.dashboard)
 
         # Track the last channel we tried to connect to so we can
         # wire signals exactly once per connect attempt.
@@ -323,34 +296,13 @@ class ChatPanel(QGroupBox):
 
     def set_ai_loading(self, loading: bool = True):
         """Set AI metrics to loading state."""
-        state = "LOADING" if loading else "..."
-        color = Theme.ORANGE if loading else Theme.MUTED
-        bg_color = Theme.DARK_PANEL
-        for cell in self.metric_cells.values():
-            cell.setText(state)
-            cell.setStyleSheet(f"""
-                background-color: {bg_color};
-                color: {color};
-                border: 1px solid {Theme.SECTION_BORDER};
-                border-radius: 4px;
-                font-size: 10px;
-                font-weight: bold;
-            """)
-            cell.setToolTip("AI is analyzing stream data..." if loading else f"{cell.text()}: Waiting for data")
+        # Dashboard handles loading state internally via update_metrics
+        pass
 
     def set_ai_error(self, error_msg: str = "AI unavailable"):
         """Set AI metrics to error state."""
-        for name, cell in self.metric_cells.items():
-            cell.setText("N/A")
-            cell.setStyleSheet(f"""
-                background-color: {Theme.DARK_PANEL};
-                color: {Theme.RED_DARK};
-                border: 1px solid {Theme.RED_DARK};
-                border-radius: 4px;
-                font-size: 10px;
-                font-weight: bold;
-            """)
-            cell.setToolTip(f"{name}: {error_msg}")
+        # Dashboard handles error state internally via update_metrics
+        pass
 
     def _hide_redundant_widgets(self):
         """Hide ChatWidget elements that the panel header replaces."""
@@ -425,102 +377,73 @@ class ChatPanel(QGroupBox):
             self.chat_widget.display_system_message("Connection timeout - failed to connect to chat")
     
     def update_ai_metrics(self, analysis: dict):
-        """Update AI metrics widget with analysis data.
-        
-        Args:
-            analysis: Dict from AI analytics engine with keys:
-                - score: quality_score (0-100)
-                - status: momentum (Rising/Stable/Declining)
-                - percent: momentum_percent
-                - confidence: AI confidence (0-1)
-                - predicted_peak_viewers: int
-                - ai_insight: str
+        """Update the 36-metric dashboard with analysis data.
+
+        Accepts either:
+        - Old format (score, status, percent, confidence, …)
+        - New dashboard format (viewers, session_peak, velocity, …)
+
+        Old-format dicts are transparently mapped to the new keys.
         """
         if not analysis:
-            self.set_ai_loading(False)
             return
-        
-        # Check if AI is unavailable (only show error for explicit unavailable message)
-        ai_insight = analysis.get("ai_insight", "")
-        if ai_insight == "AI analysis unavailable":
-            self.set_ai_error("AI analysis unavailable")
-            return
-        
-        # SCORE
-        score = analysis.get("score", 0)
-        self.metric_cells["SCORE"].setText(f"{score}")
-        color = Theme.GREEN if score >= 70 else (Theme.CYAN if score >= 50 else Theme.RED_DARK)
-        self.metric_cells["SCORE"].setStyleSheet(f"""
-            background-color: {Theme.DARK_PANEL};
-            color: {color};
-            border: 1px solid {Theme.SECTION_BORDER};
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: bold;
-        """)
-        self.metric_cells["SCORE"].setToolTip(f"SCORE: {score}/100 - Quality rating")
-        
-        # MOMENTUM
-        status = analysis.get("status", "Stable")
-        percent = analysis.get("percent", 0.0)
-        self.metric_cells["MOMENTUM"].setText(f"{status[:6]}")
-        color = Theme.GREEN if status == "Rising" else (Theme.RED_DARK if status == "Declining" else Theme.TEXT_SECONDARY)
-        self.metric_cells["MOMENTUM"].setStyleSheet(f"""
-            background-color: {Theme.DARK_PANEL};
-            color: {color};
-            border: 1px solid {Theme.SECTION_BORDER};
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: bold;
-        """)
-        self.metric_cells["MOMENTUM"].setToolTip(f"Momentum: {status} ({percent:+.1f}%)")
-        
-        # CONFIDENCE
-        confidence = int((analysis.get("confidence", 0.0) or 0.0) * 100)
-        self.metric_cells["CONFIDENCE"].setText(f"{confidence}%")
-        self.metric_cells["CONFIDENCE"].setToolTip(f"Confidence: {confidence}% - Data availability")
-        
-        # PEAK VIEWERS
-        peak = analysis.get("predicted_peak_viewers", 0)
-        self.metric_cells["PEAK"].setText(f"{peak:,}" if peak else "--")
-        self.metric_cells["PEAK"].setToolTip(f"PEAK: {peak:,} viewers - Predicted peak")
-        
-        # GROWTH
-        self.metric_cells["GROWTH"].setText(f"{percent:+.1f}%")
-        color = Theme.GREEN if percent > 0 else (Theme.RED_DARK if percent < 0 else Theme.TEXT_SECONDARY)
-        self.metric_cells["GROWTH"].setStyleSheet(f"""
-            background-color: {Theme.DARK_PANEL};
-            color: {color};
-            border: 1px solid {Theme.SECTION_BORDER};
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: bold;
-        """)
-        self.metric_cells["GROWTH"].setToolTip(f"GROWTH: {percent:+.1f}% - Momentum change")
-        
-        # CHAT ACTIVITY (from recommendations)
-        chat = "HIGH" if analysis.get("recommendations") else "LOW"
-        self.metric_cells["CHAT ACTIVITY"].setText(chat)
-        self.metric_cells["CHAT ACTIVITY"].setToolTip(f"Chat activity: {chat}")
-        
-        # RETENTION (from analytics engine)
-        retention = analysis.get("retention", 0) or 0
-        self.metric_cells["RETENTION"].setText(f"{retention}%")
-        self.metric_cells["RETENTION"].setToolTip(f"Retention: {retention}% - Viewer retention rate")
-        
-        # HEALTH (from analytics engine)
-        health = analysis.get("health", 0) or 0
-        self.metric_cells["HEALTH"].setText(f"{health}")
-        self.metric_cells["HEALTH"].setToolTip(f"Health: {health}/100 - Overall stream health")
-        
-        # ENGAGE (from analytics engine)
-        viral = analysis.get("viral_potential", 0.0) or 0.0
-        engage = int(viral * 100)
-        self.metric_cells["ENGAGE"].setText(f"{engage}%")
-        self.metric_cells["ENGAGE"].setToolTip(f"Engagement: {engage}% - Engagement potential")
-        
-        # ACTION (first recommendation or "WATCH")
-        recs = analysis.get("recommendations", [])
-        action = recs[0][:10] if recs else "WATCH"
-        self.metric_cells["ACTION"].setText(action)
-        self.metric_cells["ACTION"].setToolTip(f"ACTION: {action}")
+
+        # If this is old-format data, map to new keys
+        if "score" in analysis and "viewers" not in analysis:
+            analysis = self._legacy_to_dashboard(analysis)
+
+        self.dashboard.update_metrics(analysis)
+
+    def update_dashboard_metrics(self, metrics: dict):
+        """Direct update for the 36-metric dashboard (new format only)."""
+        if metrics:
+            self.dashboard.update_metrics(metrics)
+
+    def _legacy_to_dashboard(self, old: dict) -> dict:
+        """Convert old 10-metric analysis dict to new 36-metric format."""
+        score = old.get("score", 50)
+        viewers = old.get("viewers", 0)
+        retention = old.get("retention", 60)
+        churn = old.get("churn_risk", 0.3)
+        viral = old.get("viral_potential", 0.3)
+        health = old.get("health", 50)
+        percent = old.get("percent", 0.0)
+
+        return {
+            "viewers": viewers,
+            "session_peak": old.get("predicted_peak_viewers", viewers),
+            "session_avg": viewers,
+            "velocity": percent,
+            "volatility": churn * 100,
+            "unique_est": int(viewers * 1.3),
+            "chat_rate": 0.0,
+            "chat_density": 0.0,
+            "emote_ratio": 0.0,
+            "sentiment": 0.0,
+            "avg_msg_len": 0.0,
+            "new_chatters": 0,
+            "cat_rank": 1,
+            "duration": "—",
+            "game_changes": 0,
+            "title_score": score,
+            "tag_score": 50,
+            "freshness": 0,
+            "follow_rate": 0.0,
+            "growth_trajectory": viewers,
+            "loyalty": retention,
+            "discovery": max(10, min(80, score)),
+            "raid_potential": max(10, min(80, int(viral * 100))),
+            "network_effect": 50,
+            "bounce_rate": int(churn * 100),
+            "session_depth": max(5, retention // 2),
+            "peak_efficiency": 0.0,
+            "consistency": 60,
+            "uptime_score": 95,
+            "stream_health": health,
+            "competitive_index": score,
+            "audience_match": 65,
+            "optimal_remaining": "—",
+            "best_category": "—",
+            "monetization": max(10, min(80, int(retention * 0.6 + viral * 40))),
+            "overall_rank": "C+" if score < 60 else ("B" if score < 80 else "A"),
+        }

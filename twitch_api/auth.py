@@ -9,6 +9,9 @@ RETRY_DELAY = 2
 
 class AuthMixin:
     def get_app_access_token(self):
+        # Skip if client secret is not configured (user token still works)
+        if not TWITCH_CLIENT_SECRET:
+            return None
         last_error = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:

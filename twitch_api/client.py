@@ -3,6 +3,7 @@ import subprocess
 
 import requests
 from dotenv import load_dotenv
+from logger import debug
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +24,9 @@ class TwitchAPIError(RuntimeError):
 
 class TwitchAPIBase:
     def __init__(self, access_token=None):
-        self.validate_configuration()
+        # Skip strict validation if we already have a valid token
+        if not access_token:
+            self.validate_configuration()
         # Use pre-validated token if provided (avoids double validation)
         if access_token:
             self.access_token = access_token
@@ -31,7 +34,9 @@ class TwitchAPIBase:
             from twitch_token_manager import get_valid_token
             self.access_token = get_valid_token()
         if not self.access_token:
-            raise RuntimeError("Could not obtain a valid Twitch user access token.")
+            # Allow app to continue without Twitch auth (API features disabled)
+            self.access_token = ""
+            debug("[TWITCH] No valid Twitch token — API features disabled")
         self.headers = {
             "Client-ID": TWITCH_CLIENT_ID,
             "Authorization": f"Bearer {self.access_token}",
@@ -46,8 +51,7 @@ class TwitchAPIBase:
     def validate_configuration(self):
         if not TWITCH_CLIENT_ID:
             raise RuntimeError(f"TWITCH_CLIENT_ID is missing from {ENV_FILE}")
-        if not TWITCH_CLIENT_SECRET:
-            raise RuntimeError(f"TWITCH_CLIENT_SECRET is missing from {ENV_FILE}")
+        # Client secret is optional — only needed for app access token, not user token
 
     def get(self, endpoint, params=None):
         response = requests.get(

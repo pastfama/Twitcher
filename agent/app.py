@@ -41,11 +41,13 @@ async def health():
 from mcp_servers.streamer_tool import router as streamer_router
 from mcp_servers.analytics_tool import router as analytics_router
 from mcp_servers.viewer_tool import router as viewer_router
+from mcp_servers.commentary_tool import router as commentary_router
 
 # Include MCP tool routers
 app.include_router(streamer_router, prefix="/api/mcp", tags=["streamer"])
 app.include_router(analytics_router, prefix="/api/mcp", tags=["analytics"])
 app.include_router(viewer_router, prefix="/api/mcp", tags=["viewer"])
+app.include_router(commentary_router, prefix="/api/mcp", tags=["commentary"])
 
 if __name__ == "__main__":
     import uvicorn

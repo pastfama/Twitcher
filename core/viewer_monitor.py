@@ -5,10 +5,113 @@ Supports all platforms (Twitch, Kick, YouTube) by routing each
 channel through the platform manager based on its ``platform`` field.
 """
 
+import time
+import threading
+from collections import deque
+from typing import Dict, Any, Optional, Set
+
 from PySide6.QtCore import QObject, QTimer
 
 from core.workers import run_in_background
 from logger import debug
+
+
+class ChatMetricsTracker:
+    """Tracks real-time chat metrics (rate, density, emote ratio, etc.)
+    from incoming chat messages.  Thread-safe — the ChatPanel feeds
+    messages in from the IRC thread while the ViewerMonitor reads
+    snapshots from the GUI timer thread."""
+
+    def __init__(self, window_seconds: int = 60):
+        self._window = window_seconds
+        self._lock = threading.Lock()
+        self._messages: deque = deque()  # (timestamp, username, text, has_emote)
+        self._seen_users: Set[str] = set()
+        self._new_chatter_count = 0
+        self._game_changes = 0
+        self._last_game: Optional[str] = None
+        self._last_game_change_time: float = time.time()
+        self._stream_start: float = time.time()
+
+    def record_message(self, username: str, text: str, has_emote: bool = False):
+        """Called by the ChatPanel for every incoming chat message."""
+        now = time.time()
+        with self._lock:
+            self._messages.append((now, username, text, has_emote))
+            if username not in self._seen_users:
+                self._seen_users.add(username)
+                self._new_chatter_count += 1
+
+    def record_game_change(self, new_game: str):
+        """Called when stream category/game changes."""
+        now = time.time()
+        with self._lock:
+            if self._last_game and new_game != self._last_game:
+                self._game_changes += 1
+                self._last_game_change_time = now
+            self._last_game = new_game
+
+    def reset(self):
+        """Reset all tracking (e.g. on channel switch)."""
+        with self._lock:
+            self._messages.clear()
+            self._seen_users.clear()
+            self._new_chatter_count = 0
+            self._game_changes = 0
+            self._last_game = None
+            self._last_game_change_time = time.time()
+            self._stream_start = time.time()
+
+    def snapshot(self, current_viewers: int = 0) -> Dict[str, Any]:
+        """Return a snapshot of all computed chat metrics.  Called from
+        the GUI timer thread."""
+        now = time.time()
+        cutoff = now - self._window
+
+        with self._lock:
+            # Prune old messages
+            while self._messages and self._messages[0][0] < cutoff:
+                self._messages.popleft()
+
+            total = len(self._messages)
+            window_minutes = self._window / 60.0
+            chat_rate = total / window_minutes if window_minutes > 0 else 0.0
+
+            # Chat density: messages per viewer
+            chat_density = (chat_rate / max(current_viewers, 1)) * 100
+
+            # Emote ratio
+            emote_count = sum(1 for _, _, _, has_e in self._messages if has_e)
+            emote_ratio = (emote_count / total * 100) if total > 0 else 0.0
+
+            # Average message length
+            if total > 0:
+                avg_len = sum(len(txt) for _, _, txt, _ in self._messages) / total
+            else:
+                avg_len = 0.0
+
+            new_chatters = self._new_chatter_count
+            unique_chatters = len(self._seen_users)
+            game_changes = self._game_changes
+            freshness = int(now - self._last_game_change_time) // 60
+
+        # Audience loyalty heuristic: ratio of unique chatters to new
+        loyalty = 50
+        if unique_chatters > 0 and new_chatters > 0:
+            returning = max(0, unique_chatters - new_chatters)
+            loyalty = max(10, min(95, int(returning / unique_chatters * 100)))
+
+        return {
+            "chat_rate": chat_rate,
+            "chat_density": chat_density,
+            "emote_ratio": emote_ratio,
+            "avg_msg_length": avg_len,
+            "new_chatters": new_chatters,
+            "unique_chatters": unique_chatters,
+            "game_changes": game_changes,
+            "freshness_minutes": freshness,
+            "audience_loyalty": loyalty,
+        }
 
 
 class ViewerMonitor(QObject):

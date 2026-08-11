@@ -5,6 +5,13 @@ import traceback
 import threading
 from pathlib import Path
 
+# Load .env file early so Azure AI credentials are available
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
 from PySide6.QtCore import (
     QCoreApplication,
     QMetaObject,
@@ -95,6 +102,8 @@ def create_application():
 def initialize_twitch_authentication():
     """Initialize authentication for all platforms."""
     from account_manager import AccountManager
+    from mainmenu.auth_dialog import show_auth_dialog
+
     am = AccountManager()
 
     print()
@@ -105,16 +114,18 @@ def initialize_twitch_authentication():
     access_token = get_valid_token()
     if not access_token:
         print("[AUTH] No valid Twitch token found.")
-        print("[AUTH] Starting Twitch authorization flow...")
-        if am.login_twitch():
+        # Show popup dialog for Twitch login
+        print("[AUTH] Showing login dialog...")
+        if show_auth_dialog("twitch"):
             access_token = get_valid_token()
+            if access_token:
+                print("[AUTH] Twitch authentication is ready.")
+            else:
+                print("[AUTH] Twitch authentication still unavailable after login.")
         else:
-            print("[AUTH] Twitch login failed or was cancelled.")
-
-    if access_token:
-        print("[AUTH] Twitch authentication is ready.")
+            print("[AUTH] Twitch login skipped.")
     else:
-        print("[AUTH] Twitch authentication unavailable.")
+        print("[AUTH] Twitch authentication is ready.")
 
     # Check Kick
     print("[AUTH] Checking Kick...")
@@ -122,8 +133,9 @@ def initialize_twitch_authentication():
         print("[AUTH] Kick configured (public API).")
     else:
         print("[AUTH] Kick not configured.")
-        print("[AUTH] To enable Kick, set KICK_CLIENT_ID and KICK_CLIENT_SECRET in .env")
-        print("[AUTH] Or run: python -c \"from account_manager import AccountManager; AccountManager().login_kick()\"")
+        # Show popup dialog for Kick login
+        print("[AUTH] Showing Kick login dialog...")
+        show_auth_dialog("kick")
 
     # Check YouTube
     print("[AUTH] Checking YouTube...")
@@ -131,8 +143,9 @@ def initialize_twitch_authentication():
         print("[AUTH] YouTube configured.")
     else:
         print("[AUTH] YouTube not configured.")
-        print("[AUTH] To enable YouTube, set YOUTUBE_API_KEY or YOUTUBE_CLIENT_ID in .env")
-        print("[AUTH] Or run: python -c \"from account_manager import AccountManager; AccountManager().login_youtube()\"")
+        # Show popup dialog for YouTube login
+        print("[AUTH] Showing YouTube login dialog...")
+        show_auth_dialog("youtube")
 
     print()
     return access_token

@@ -1,49 +1,55 @@
 """Azure OpenAI client for Twitcher AI features.
 
-Provides a unified interface to Azure GPT models for all AI-powered analytics.
+Uses direct HTTP requests instead of the OpenAI SDK to avoid
+aggressive retry behavior that causes 429 rate limit floods.
+
+Configuration via environment variables:
+  AZURE_OPENAI_ENDPOINT     - Azure OpenAI endpoint
+  AZURE_OPENAI_DEPLOYMENT   - Model deployment name (e.g., gpt-5-terra)
+  AZURE_OPENAI_API_KEY      - API key
+  AZURE_OPENAI_API_VERSION  - API version (default: 2025-01-01-preview)
 """
 
 import os
 import json
 import threading
 import time
+import requests
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
 from logger import debug
 
-try:
-    from openai import OpenAI
-    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-    HAS_AZURE_AI = True
-except ImportError:
-    HAS_AZURE_AI = False
-    debug("[AZURE_AI] openai or azure-identity not installed - AI features disabled")
-
 
 class AzureAIClient:
-    """Thread-safe Azure OpenAI client with caching and retry logic."""
+    """Thread-safe Azure OpenAI client using direct HTTP requests."""
     
     def __init__(self):
-        if not HAS_AZURE_AI:
-            raise RuntimeError("Azure AI dependencies not installed. Run: pip install openai azure-identity")
+        self.endpoint = os.getenv(
+            "AZURE_OPENAI_ENDPOINT",
+            "https://aoai-twitcher-80fcb.openai.azure.com/"
+        ).rstrip("/")
+        self.deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-vision")
+        self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
+        self.api_key = os.getenv("AZURE_OPENAI_API_KEY", "")
         
-        self.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "https://malovsky99-6011-resource.services.ai.azure.com/openai/v1")
-        self.deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5-mini-1")
-        self.token_provider = get_bearer_token_provider(DefaultAzureCredential(), "https://ai.azure.com/.default")
-        self.client = OpenAI(
-            base_url=self.endpoint,
-            api_key=self.token_provider
-        )
         self._lock = threading.RLock()
-        self._cache = {}  # Simple in-memory cache
-        self._cache_ttl = 300  # 5 minutes default
+        self._cache = {}
+        self._cache_ttl = 300
+        self._last_call_time = 0
+        self._min_interval = 2.0  # Minimum 2 seconds between calls
         
+        self._stats = {
+            "total_calls": 0, "cache_hits": 0, "api_calls": 0,
+            "errors": 0, "total_tokens": 0, "total_latency_ms": 0,
+            "last_call_time": None,
+        }
+        
+        debug(f"[AZURE_AI] Initialized: deployment={self.deployment}, endpoint={self.endpoint[:40]}...")
+
     def _get_cache_key(self, method: str, **kwargs) -> str:
-        """Generate cache key from method name and arguments."""
         return f"{method}:{json.dumps(kwargs, sort_keys=True)}"
     
     def _get_cached(self, cache_key: str) -> Optional[Dict[str, Any]]:
-        """Get cached result if not expired."""
         if cache_key in self._cache:
             result, timestamp = self._cache[cache_key]
             if time.time() - timestamp < self._cache_ttl:
@@ -52,11 +58,12 @@ class AzureAIClient:
                 del self._cache[cache_key]
         return None
     
-    def _set_cache(self, cache_key: str, result: Dict[str, Any]):
-        """Cache result with timestamp."""
+    def get_agent_stats(self) -> Dict[str, Any]:
         with self._lock:
-            self._cache[cache_key] = (result, time.time())
-    
+            stats = dict(self._stats)
+            stats["avg_latency_ms"] = int(stats["total_latency_ms"] / max(stats["api_calls"], 1))
+            return stats
+
     def call_ai(self, 
                 system_prompt: str, 
                 user_prompt: str,
@@ -64,130 +71,127 @@ class AzureAIClient:
                 cache_ttl: int = 300,
                 temperature: float = 0.7,
                 max_tokens: int = 1000) -> Dict[str, Any]:
-        """Make an AI call with caching and error handling.
-        
-        Args:
-            system_prompt: System instruction for the AI
-            user_prompt: User message/data to analyze
-            cache_key: Optional cache key (auto-generated if not provided)
-            cache_ttl: Cache time-to-live in seconds
-            temperature: AI creativity (0-1)
-            max_tokens: Max response tokens
-            
-        Returns:
-            Dict with AI response and metadata
-        """
-        # Check cache
+        """Make an AI call using direct HTTP requests."""
         if cache_key is None:
             cache_key = self._get_cache_key("call", system=system_prompt[:50], user=user_prompt[:50])
         
+        with self._lock:
+            self._stats["total_calls"] += 1
+
         cached = self._get_cached(cache_key)
         if cached:
-            debug(f"[AZURE_AI] Cache hit: {cache_key[:50]}")
+            with self._lock:
+                self._stats["cache_hits"] += 1
             return cached
         
-        # Make AI call
+        # Rate limit: wait minimum interval between calls
+        elapsed = time.time() - self._last_call_time
+        if elapsed < self._min_interval:
+            time.sleep(self._min_interval - elapsed)
+        
+        _start = time.monotonic()
         try:
-            with self._lock:
-                response = self.client.responses.create(
-                    model=self.deployment,
-                    input=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=temperature,
-                    max_tokens=max_tokens
-                )
-            
-            # Parse response
-            result_text = response.output[0] if response.output else ""
-            
-            result = {
-                "success": True,
-                "content": result_text,
-                "model": self.deployment,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "cached": False
+            url = f"{self.endpoint}/openai/deployments/{self.deployment}/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "api-key": self.api_key,
             }
             
-            # Cache result
-            self._cache[cache_key] = (result, time.time())
+            # Build request body
+            body = {
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+            }
             
-            debug(f"[AZURE_AI] Call successful: {cache_key[:50]}")
+            # GPT-5 uses max_completion_tokens, others use max_tokens
+            if "gpt-5" in self.deployment:
+                body["max_completion_tokens"] = max_tokens
+            else:
+                body["temperature"] = temperature
+                body["max_tokens"] = max_tokens
+            
+            params = {"api-version": self.api_version}
+            
+            debug(f"[AZURE_AI] HTTP POST: model={self.deployment}")
+            response = requests.post(url, json=body, headers=headers, params=params, timeout=30)
+            self._last_call_time = time.time()
+            
+            if response.status_code == 429:
+                # Rate limited — wait and retry once
+                retry_after = int(response.headers.get("Retry-After", 5))
+                debug(f"[AZURE_AI] Rate limited, waiting {retry_after}s")
+                time.sleep(retry_after)
+                response = requests.post(url, json=body, headers=headers, params=params, timeout=30)
+                self._last_call_time = time.time()
+            
+            response.raise_for_status()
+            
+            data = response.json()
+            result_text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            _elapsed = int((time.monotonic() - _start) * 1000)
+            _tokens = data.get("usage", {}).get("completion_tokens", 0) or len(result_text) // 4
+            
+            with self._lock:
+                self._stats["api_calls"] += 1
+                self._stats["total_latency_ms"] += _elapsed
+                self._stats["total_tokens"] += _tokens
+                self._stats["last_call_time"] = time.time()
+            
+            result = {
+                "success": True, "content": result_text,
+                "model": self.deployment,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "cached": False, "latency_ms": _elapsed, "tokens_est": _tokens,
+            }
+            
+            self._cache[cache_key] = (result, time.time())
+            debug(f"[AZURE_AI] Success ({_elapsed}ms): {result_text[:80]}")
             return result
             
         except Exception as e:
-            debug(f"[AZURE_AI] Call failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "content": None,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
+            _elapsed = int((time.monotonic() - _start) * 1000)
+            with self._lock:
+                self._stats["errors"] += 1
+                self._stats["total_latency_ms"] += _elapsed
+            debug(f"[AZURE_AI] Failed: {e}")
+            return {"success": False, "error": str(e), "content": None,
+                    "timestamp": datetime.now(timezone.utc).isoformat()}
     
-    def call_ai_json(self,
-                     system_prompt: str,
-                     user_prompt: str,
-                     cache_key: Optional[str] = None,
-                     cache_ttl: int = 300) -> Dict[str, Any]:
-        """Make an AI call expecting JSON response.
-        
-        Automatically parses JSON from AI response.
-        """
-        # Add JSON instruction to system prompt
+    def call_ai_json(self, system_prompt: str, user_prompt: str,
+                     cache_key: Optional[str] = None, cache_ttl: int = 300) -> Dict[str, Any]:
         system_prompt += "\n\nIMPORTANT: Respond ONLY with valid JSON, no markdown, no extra text."
-        
-        result = self.call_ai(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            cache_key=cache_key,
-            cache_ttl=cache_ttl,
-            temperature=0.3,  # Lower temperature for structured data
-            max_tokens=2000
-        )
-        
+        result = self.call_ai(system_prompt=system_prompt, user_prompt=user_prompt,
+                              cache_key=cache_key, cache_ttl=cache_ttl,
+                              temperature=0.3, max_tokens=2000)
         if not result["success"] or not result["content"]:
             return {"success": False, "error": result.get("error", "Unknown error")}
-        
-        # Try to parse JSON
         try:
-            # Clean up response (remove markdown code blocks if present)
             content = result["content"]
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0]
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0]
-            
             data = json.loads(content.strip())
-            return {
-                "success": True,
-                "data": data,
-                "model": result["model"],
-                "timestamp": result["timestamp"],
-                "cached": result.get("cached", False)
-            }
+            return {"success": True, "data": data, "model": result["model"],
+                    "timestamp": result["timestamp"], "cached": result.get("cached", False)}
         except json.JSONDecodeError as e:
-            debug(f"[AZURE_AI] JSON parse error: {e}, content: {result['content'][:200]}")
-            return {
-                "success": False,
-                "error": f"JSON parse error: {e}",
-                "raw_content": result["content"]
-            }
+            return {"success": False, "error": f"JSON parse error: {e}", "raw_content": result["content"]}
     
     def clear_cache(self):
-        """Clear the AI cache."""
         with self._lock:
             self._cache.clear()
-            debug("[AZURE_AI] Cache cleared")
 
 
-# Global singleton
 _ai_client = None
+_ai_client_initialized = False
 
 def get_ai_client() -> Optional[AzureAIClient]:
-    """Get the global AI client instance."""
-    global _ai_client
-    if _ai_client is None and HAS_AZURE_AI:
+    global _ai_client, _ai_client_initialized
+    if _ai_client is None and not _ai_client_initialized:
+        _ai_client_initialized = True
         try:
             _ai_client = AzureAIClient()
             debug("[AZURE_AI] Client initialized")

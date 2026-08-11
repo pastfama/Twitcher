@@ -40,27 +40,26 @@ class MainMenuWindowState:
         self.chat_panel = self.chat_panel_cls(access_token=get_valid_token() or "")
         self.dispatcher_panel = self.dispatcher_panel_cls()
 
-        # --- 3-column grid: chat is full-height center column ---
-        # Layout per user sketch (red=chat center, green=4 equal side panels):
+        # --- 3-column grid: optimized to fill all space ---
         #   ┌──────────────┬────────────────┬──────────────┐
-        #   │ CURRENTLY    │                │  NEXT STREAM │
-        #   │ WATCHING     │     CHAT       │              │
+        #   │ CURRENTLY    │                │  AI          │
+        #   │ WATCHING     │     CHAT       │  COMMENTATOR │
         #   ├──────────────┤  (full height) ├──────────────┤
         #   │ LIVE FOLLOWED│                │  DISPATCHER  │
         #   └──────────────┴────────────────┴──────────────┘
-        #        30%              40%              30%
         grid = QGridLayout()
-        grid.setSpacing(10)
+        grid.setSpacing(6)
+        grid.setContentsMargins(6, 6, 6, 6)
         grid.addWidget(self.current_panel,       0, 0)        # top-left
         grid.addWidget(self.chat_panel,          0, 1, 2, 1)  # center, spans 2 rows
-        grid.addWidget(self.next_panel,          0, 2)        # top-right
+        grid.addWidget(self.next_panel,          0, 2)        # top-right (commentator)
         grid.addWidget(self.live_followed_panel, 1, 0)        # bottom-left
         grid.addWidget(self.dispatcher_panel,    1, 2)        # bottom-right
         grid.setColumnStretch(0, 3)   # left  30%
         grid.setColumnStretch(1, 4)   # chat  40%
         grid.setColumnStretch(2, 3)   # right 30%
-        grid.setRowStretch(0, 1)      # top    50%
-        grid.setRowStretch(1, 1)      # bottom 50%
+        grid.setRowStretch(0, 1)      # top  (currwatching + commentator)
+        grid.setRowStretch(1, 1)      # bottom (livefollowed) same size as top
         main_layout.addLayout(grid, 1)
 
     def log(self, message):

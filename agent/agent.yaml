@@ -69,6 +69,25 @@ tools:
       platform1: string - First platform, default "twitch"
       platform2: string - Second platform, default "twitch"
 
+  - name: analyze_sentiment
+    description: Analyze chat sentiment for a streamer, returning a score from -100 (very negative) to +100 (very positive) with mood classification
+    parameters:
+      login: string - The streamer's username
+      platform: string - Platform name, default "twitch"
+      chat_messages: list - Optional list of recent chat messages to analyze
+
+  - name: get_dashboard_metrics
+    description: Get all 36 dashboard metrics for a streamer including viewer dynamics, engagement, content, growth, performance, and AI insights
+    parameters:
+      login: string - The streamer's username
+      platform: string - Platform name, default "twitch"
+
+  - name: get_mood_status
+    description: Get the current AI mood classification for a stream based on sentiment analysis
+    parameters:
+      login: string - The streamer's username
+      platform: string - Platform name, default "twitch"
+
 # Response formatting
 response_format:
   type: text

@@ -368,15 +368,17 @@ class TwitchTokenManager:
             return None
 
 
+
         if not CLIENT_SECRET:
 
             print()
 
             print(
                 "[TWITCH AUTH] "
-                "TWITCH_CLIENT_SECRET missing."
+                "TWITCH_CLIENT_SECRET missing — cannot refresh expired token"
             )
 
+            # Can't refresh — return None so app opens browser for login
             return None
 
 

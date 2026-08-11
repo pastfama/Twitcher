@@ -4,13 +4,16 @@ from PySide6.QtWidgets import QMainWindow
 from logger import debug
 from video import VideoWindow
 from core import StreamDispatcher, ViewerTracker, ViewerMonitor, wait_for_pending
+from core.viewer_monitor import ChatMetricsTracker
 from .app_runtime import MainMenuRuntime
+from .couch_mode import CouchModeManager
 from .channel_state import MainMenuStreamState
 from .currwatching import CurrentWatchingPanel
 from .dispatcher_panel import DispatcherPanel
 from .livefollowed import LiveFollowedPanel
 from .chatpanel import ChatPanel
 from .nextstream import NextStreamPanel
+from .commentator import CommentatorPanel
 import core.db as db
 from .window_state import MainMenuWindowState
 
@@ -62,6 +65,7 @@ class MainMenu(
         #
         # Viewer Monitor (owns its own QTimer)
         #
+        self.chat_metrics_tracker = ChatMetricsTracker(window_seconds=60)
         self.viewer_monitor = ViewerMonitor(
             api=self.api,
             tracker=self.viewer_tracker,
@@ -81,8 +85,8 @@ class MainMenu(
         self.avatar_cache = {}
         self.project_root = PROJECT_ROOT
         self.current_panel_cls = CurrentWatchingPanel
-        self.next_panel_cls = NextStreamPanel
-        # Inject analytics engine into next stream panel
+        self.next_panel_cls = CommentatorPanel
+        # Inject analytics engine into commentator panel
         if hasattr(self, 'next_panel') and self.next_panel:
             self.next_panel.set_analytics_engine(self.analytics_engine)
         self.live_followed_panel_cls = LiveFollowedPanel
@@ -104,6 +108,19 @@ class MainMenu(
         )
         self.build_interface()
         self.restore_window_geometry()
+
+        # Couch mode (Ctrl+L to toggle)
+        self.couch_mode = CouchModeManager(self)
+        self.couch_mode.button.setParent(self)
+        self.couch_mode.button.move(10, 10)
+        self.couch_mode.button.raise_()
+        self.couch_mode.button.show()
+
+        # Vision analysis timer (capture + GPT-4o analysis every 10s)
+        self._vision_timer = QTimer(self)
+        self._vision_timer.setInterval(10000)  # 10 seconds
+        self._vision_timer.timeout.connect(self._analyze_stream_frame)
+        QTimer.singleShot(10000, self._vision_timer.start)  # start after 10s delay
         #
         # Periodic timers
         #
@@ -131,76 +148,82 @@ class MainMenu(
         self.load_twitch()
 
     def _update_chat_ai_metrics(self):
-        """Update chat panel with cached or fallback AI metrics."""
+        """Update chat panel with 36-metric dashboard data.
+
+        Computes all 36 metrics from stream data, viewer history, and
+        local chat metrics, then feeds them to the dashboard.
+        """
         if not hasattr(self, 'chat_panel') or not self.chat_panel:
             debug("[MAIN MENU] No chat panel available")
             return
         if not self.current_channel:
             debug("[MAIN MENU] No current channel")
             return
-        
-        debug(f"[MAIN MENU] Updating chat metrics for {self.current_channel}")
-        
-        # Try to get cached analysis from DB
+
+        debug(f"[MAIN MENU] Updating 36-metric dashboard for {self.current_channel}")
+
         try:
-            from core.db import get_streamer
-            streamer = get_streamer(self.current_channel, platform=self.current_stream.get("platform", "twitch"))
-            debug(f"[MAIN MENU] Streamer data found: {streamer is not None}")
-            if streamer:
-                cached_ai = streamer.get("data", {}).get("ai_analysis", {})
-                debug(f"[MAIN MENU] Cached AI data: {bool(cached_ai)}")
-                if cached_ai:
-                    debug(f"[MAIN MENU] Cached AI score: {cached_ai.get('quality_score')}")
-                    # Convert cached format to UI format with derived metrics
-                    score = cached_ai.get("quality_score", 50)
-                    confidence = cached_ai.get("confidence", 0.0)
-                    churn = cached_ai.get("churn_risk", 0.3)
-                    analysis = {
-                        "score": score,
-                        "status": cached_ai.get("momentum", "Stable"),
-                        "percent": cached_ai.get("momentum_percent", 0.0),
-                        "confidence": confidence,
-                        "health": min(100, int(score * 0.7 + confidence * 30)),
-                        "retention": int((1.0 - churn) * 100),
-                        "churn_risk": churn,
-                        "viral_potential": cached_ai.get("viral_potential", 0.0),
-                        "predicted_peak_viewers": cached_ai.get("predicted_peak_viewers", 0),
-                        "ai_insight": cached_ai.get("ai_insight", ""),
-                        "recommendations": cached_ai.get("recommendations", []),
-                    }
-                    self.chat_panel.update_ai_metrics(analysis)
-                    debug(f"[MAIN MENU] Updated chat metrics with cached data for {self.current_channel}")
-                    return
-        except Exception as e:
-            debug(f"[MAIN MENU] Failed to get cached AI data: {e}")
-        
-        # No cached AI data - show fallback metrics based on viewer count
-        current_score = self.chat_panel.metric_cells["SCORE"].text()
-        debug(f"[MAIN MENU] Current SCORE text: '{current_score}'")
-        if current_score in ("...", "LOADING", "N/A"):
-            debug(f"[MAIN MENU] Setting fallback metrics for {self.current_channel}")
-            # Create fallback analysis based on current stream data
-            viewers = self.current_stream.get("viewer_count", 0) if self.current_stream else 0
-            # Use the AI engine's fallback which includes all derived metrics
-            if self.analytics_engine and hasattr(self.analytics_engine, '_fallback_analysis'):
-                fallback_analysis = self.analytics_engine._fallback_analysis(
-                    self.current_stream or {"viewer_count": viewers}
+            from core.db import get_viewer_history
+
+            stream = self.current_stream or {}
+            platform = stream.get("platform", "twitch")
+            login = self.current_channel
+
+            # Get viewer history from DB
+            viewer_history = get_viewer_history(login, platform=platform, limit=50)
+
+            # Get local chat metrics snapshot
+            chat_metrics = self.chat_metrics_tracker.snapshot(
+                current_viewers=int(stream.get("viewer_count", 0))
+            )
+
+            # Compute all 36 metrics via the analytics engine
+            if self.analytics_engine:
+                dashboard_data = self.analytics_engine.analyze_dashboard_metrics(
+                    stream=stream,
+                    viewer_history=viewer_history,
+                    chat_metrics=chat_metrics,
                 )
             else:
-                fallback_analysis = {
-                    "score": self._viewer_count_to_score(viewers),
-                    "status": "Stable",
-                    "percent": 0.0,
-                    "confidence": 0.3,
-                    "health": min(100, int(self._viewer_count_to_score(viewers) * 0.7 + 9)),
-                    "retention": 70,
-                    "churn_risk": 0.3,
-                    "viral_potential": 0.3,
-                    "predicted_peak_viewers": viewers,
-                    "ai_insight": "AI analysis pending",
-                    "recommendations": [],
-                }
-            self.chat_panel.update_ai_metrics(fallback_analysis)
+                # Minimal fallback
+                dashboard_data = self._minimal_dashboard_fallback(stream)
+
+            # Feed to dashboard
+            self.chat_panel.update_dashboard_metrics(dashboard_data)
+
+            # Feed to commentator panel (include channel + stream info)
+            if hasattr(self, 'next_panel') and self.next_panel:
+                if hasattr(self.next_panel, 'update_commentary'):
+                    dashboard_data["channel"] = login
+                    # Pass current stream data so the commentator can update its profile
+                    if self.current_stream:
+                        self.next_panel._current_stream = self.current_stream
+                    self.next_panel.update_commentary(dashboard_data)
+
+            debug(f"[MAIN MENU] Dashboard updated for {login}")
+
+        except Exception as e:
+            debug(f"[MAIN MENU] Dashboard update error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _minimal_dashboard_fallback(self, stream: dict) -> dict:
+        """Minimal fallback when analytics engine is unavailable."""
+        viewers = int(stream.get("viewer_count", 0))
+        return {
+            "viewers": viewers, "session_peak": viewers, "session_avg": viewers,
+            "velocity": 0.0, "volatility": 0.0, "unique_est": int(viewers * 1.3),
+            "chat_rate": 0.0, "chat_density": 0.0, "emote_ratio": 0.0,
+            "sentiment": 0.0, "avg_msg_len": 0.0, "new_chatters": 0,
+            "cat_rank": 1, "duration": "—", "game_changes": 0,
+            "title_score": 30, "tag_score": 30, "freshness": 0,
+            "follow_rate": 0.0, "growth_trajectory": viewers, "loyalty": 50,
+            "discovery": 30, "raid_potential": 20, "network_effect": 50,
+            "bounce_rate": 40, "session_depth": 20, "peak_efficiency": 0.0,
+            "consistency": 60, "uptime_score": 95, "stream_health": 50,
+            "competitive_index": 50, "audience_match": 50, "optimal_remaining": "—",
+            "best_category": "—", "monetization": 30, "overall_rank": "C",
+        }
 
     def _on_ai_analysis_complete(self, login: str, platform: str, analysis: dict):
         """Handle AI analysis complete signal.
@@ -218,17 +241,18 @@ class MainMenu(
             if hasattr(self, 'current_panel') and self.current_panel:
                 self.current_panel.set_stream(self.current_stream, analysis)
             
-            # Update chat panel AI metrics
+            # Update dashboard with fresh analysis (triggers 36-metric update)
             if hasattr(self, 'chat_panel') and self.chat_panel:
                 debug(f"[MAIN MENU] Calling chat_panel.update_ai_metrics()")
                 self.chat_panel.update_ai_metrics(analysis)
-                debug(f"[MAIN MENU] Chat metrics updated, SCORE now: {self.chat_panel.metric_cells['SCORE'].text()}")
+                debug(f"[MAIN MENU] Dashboard metrics updated")
             
-            # Update next stream panel if it's showing this channel
+            # Update commentator panel if it's showing this channel
             if hasattr(self, 'next_panel') and self.next_panel:
                 next_channel = getattr(self.next_panel, '_current_channel', None)
                 if next_channel == login:
-                    self.next_panel._update_analytics_ui(analysis)
+                    if hasattr(self.next_panel, 'update_commentary'):
+                        self.next_panel.update_commentary(analysis)
         else:
             debug(f"[MAIN MENU] Analysis for {login} but current channel is {self.current_channel} - skipping")
 
@@ -284,22 +308,111 @@ class MainMenu(
         self._update_chat_ai_metrics()
 
     def _refresh_live_channels(self):
-        """Periodically refresh the live channels list from Twitch API."""
+        """Periodically refresh the live channels list.
+
+        Every 3 seconds:
+        - If the list is empty, do a full API fetch.
+        - Otherwise, ensure the current stream is in the list and
+          update the LiveFollowed panel with the latest viewer counts
+          from self.live_channels (which ViewerMonitor keeps fresh).
+        - Every 5th tick (≈15 s), do a full API re-fetch so the list
+          stays up-to-date with channels going live/offline.
+        """
         if self.is_closing or not self.user:
             return
+
+        # Counter for periodic full refresh
+        if not hasattr(self, '_live_refresh_counter'):
+            self._live_refresh_counter = 0
+        self._live_refresh_counter += 1
+
         if not self.live_channels:
             debug("[LIVE CHANNELS] Refreshing (empty list)")
             self.load_live_channels()
-        else:
-            if self.current_stream:
-                current_login = self.current_stream.get('user_login')
-                in_list = any(
-                    s.get('user_login') == current_login
-                    for s in self.live_channels
-                )
-                if not in_list:
-                    debug(f"[LIVE CHANNELS] Adding current_stream {current_login} to list")
-                    self.live_channels.append(self.current_stream)
+            return
+
+        # Ensure current stream is in the list
+        if self.current_stream:
+            current_login = self.current_stream.get('user_login')
+            in_list = any(
+                s.get('user_login') == current_login
+                for s in self.live_channels
+            )
+            if not in_list:
+                debug(f"[LIVE CHANNELS] Adding current_stream {current_login} to list")
+                self.live_channels.append(self.current_stream)
+
+        # Push latest viewer counts to the LiveFollowed panel every tick
+        self.live_followed_panel.set_streams(list(self.live_channels))
+
+        # Full API re-fetch every 5 ticks (~15 seconds)
+        if self._live_refresh_counter >= 5:
+            self._live_refresh_counter = 0
+            debug("[LIVE CHANNELS] Periodic full refresh")
+            self.load_live_channels()
+
+    def _analyze_stream_frame(self):
+        """Capture a screenshot from the video window and send to GPT-4o Vision.
+
+        Called by _vision_timer on the GUI thread. Capture runs here (safe for
+        Qt widgets), then the Azure API call runs in a background thread so
+        the UI never freezes.
+        """
+        if self.is_closing:
+            return
+
+        # Only analyze if video is playing
+        try:
+            state = self.video_window.get_player_state()
+            if not state or not state.get("playing"):
+                return
+        except Exception:
+            return
+
+        # Capture screenshot directly on the GUI thread (safe — we're already here)
+        try:
+            from core.vision_client import capture_widget_screenshot, analyze_frame
+            image_bytes = capture_widget_screenshot(self.video_window)
+        except Exception as e:
+            debug(f"[VISION] Capture failed: {e}")
+            return
+
+        if not image_bytes:
+            return
+
+        debug(f"[VISION] Captured {len(image_bytes)} bytes, sending to Azure...")
+
+        # Send to Azure in a background thread to avoid blocking the UI
+        import threading
+
+        def bg_analyze():
+            try:
+                observation = analyze_frame(image_bytes)
+                if observation:
+                    # Deliver result to GUI thread
+                    from PySide6.QtCore import QTimer
+                    QTimer.singleShot(
+                        0,
+                        lambda: self.chat_panel.dashboard.ticker.add_insight(
+                            f"🎬 {observation}", "#aa44ff"
+                        ),
+                    )
+                    debug(f"[VISION] Observation: {observation[:80]}...")
+                else:
+                    debug("[VISION] Azure returned empty observation")
+            except Exception as e:
+                debug(f"[VISION] Azure analysis error: {e}")
+
+        threading.Thread(target=bg_analyze, daemon=True).start()
+
+    def _feed_vision_to_commentator(self, observation: str):
+        """Feed a GPT-4o vision observation directly to the commentator."""
+        if hasattr(self, 'next_panel') and self.next_panel:
+            bot = getattr(self.next_panel, 'bot', None)
+            bubble = getattr(self.next_panel, 'bubble', None)
+            if bot and bubble:
+                bot.set_expression("mind_blown")
+                bubble.show_text(f"🎬 {observation}", "#aa44ff")
 
     def _viewer_count_to_score(self, viewers: int) -> int:
         """Convert viewer count to a simple quality score (0-100)."""
@@ -443,7 +556,7 @@ class MainMenu(
         except Exception:
             pass
         # Stop all timers
-        for timer in [self._video_timer, self._momsg_timer, self._live_timer]:
+        for timer in [self._video_timer, self._momsg_timer, self._live_timer, self._vision_timer]:
             try:
                 timer.stop()
             except Exception:
